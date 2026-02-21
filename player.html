@@ -153,7 +153,7 @@
                 isEditing = false;
                 document.getElementById('setup-controls').style.display = 'none';
                 renderBoard();
-                updateStatus('Good to go: ${myBoardData.playerName}'); 
+                document.getElementById('status').innerText = `Driver: ${data.player_name}`;
             } else {
                 updateStatus("Registration failed..."); 
             }
