@@ -56,36 +56,29 @@
         let selectedCellIndex = null;
         let fullEventPool = [];
 
+        // 1. STARTUP
         async function init() {
-            console.log("Checking for live race state...");
+            console.log("Initializing...");
             const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
             live?.forEach(l => liveEvents.add(l.event_text));
-            setupListener();
+            
+            setupListener(); // Now defined below!
 
-            console.log("Checking for existing board ID:", myBoardData.id);
             if (myBoardData.id && myBoardData.id !== "null") {
                 loadExistingBoard();
             } else {
-                console.log("No ID found. Starting Setup.");
                 showSetupScreen(); 
             }
         }
 
+        // 2. DATA LOADING
         async function loadExistingBoard() {
-            // FIX: Changed .single() to .maybeSingle() to prevent script crashes
             const { data, error } = await db.from('player_boards')
                 .select('*')
                 .eq('id', myBoardData.id)
                 .maybeSingle();
 
-            if (error) {
-                console.error("Supabase Error:", error.message);
-                showSetupScreen();
-                return;
-            }
-
             if (data) {
-                console.log("Board found! Loading layout.");
                 myBoardData.playerName = data.player_name;
                 myBoardData.layout = data.layout;
                 myBoardData.marks = data.marks || [];
@@ -93,18 +86,15 @@
                 renderBoard();
                 document.getElementById('status').innerText = `Driver: ${data.player_name}`;
             } else {
-                console.log("ID exists but no record in DB. Resetting.");
                 localStorage.removeItem('f1_bingo_id');
                 showSetupScreen();
             }
         }
 
+        // 3. SETUP & MODAL LOGIC
         async function showSetupScreen() {
-            const name = prompt("Enter your Driver Name for the leaderboard:");
-            if (!name) {
-                document.getElementById('status').innerText = "Refresh to join the race.";
-                return;
-            }
+            const name = prompt("Enter your Driver Name:");
+            if (!name) return;
             myBoardData.playerName = name;
 
             const { data: pool } = await db.from('f1_events_pool').select('Event');
@@ -119,33 +109,85 @@
             renderBoard();
         }
 
+        function openSwapModal(index) {
+            selectedCellIndex = index;
+            const picker = document.getElementById('event-picker');
+            picker.innerHTML = "";
+            fullEventPool.forEach(ev => {
+                if (!myBoardData.layout.includes(ev)) {
+                    let opt = document.createElement('option');
+                    opt.value = ev;
+                    opt.innerHTML = ev;
+                    picker.appendChild(opt);
+                }
+            });
+            document.getElementById('swap-modal').style.display = 'flex';
+        }
+
+        function applySwap() {
+            myBoardData.layout[selectedCellIndex] = document.getElementById('event-picker').value;
+            document.getElementById('swap-modal').style.display = 'none';
+            renderBoard();
+        }
+
+        async function finalizeBoard() {
+            const { data, error } = await db.from('player_boards').insert({
+                player_name: myBoardData.playerName,
+                layout: myBoardData.layout,
+                marks: []
+            }).select().single();
+
+            if (!error) {
+                localStorage.setItem('f1_bingo_id', data.id);
+                myBoardData.id = data.id;
+                isEditing = false;
+                document.getElementById('setup-controls').style.display = 'none';
+                renderBoard();
+            }
+        }
+
+        // 4. THE RENDERER
         function renderBoard() {
-            console.log("Rendering board grid...");
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
-
             myBoardData.layout.forEach((text, index) => {
                 const cell = document.createElement('div');
                 cell.className = "cell";
                 if (text === "FREE SPACE") cell.classList.add('free-space');
                 if (liveEvents.has(text)) cell.classList.add('live-happened');
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
-
                 cell.innerText = text;
 
                 cell.onclick = () => {
-                    if (isEditing) {
-                        if (text === "FREE SPACE") return;
-                        openSwapModal(index);
-                    } else {
-                        toggleMark(index);
-                    }
+                    if (isEditing) openSwapModal(index);
+                    else toggleMark(index);
                 };
                 boardEl.appendChild(cell);
             });
         }
 
-        // ... (Rest of your toggleMark, openSwapModal, applySwap, and finalizeBoard functions)
+        // 5. MARKS & REAL-TIME
+        async function toggleMark(index) {
+            if (myBoardData.marks.includes(index)) {
+                myBoardData.marks = myBoardData.marks.filter(i => i !== index);
+            } else {
+                myBoardData.marks.push(index);
+            }
+            renderBoard();
+            // Optional: Sync marks to DB
+            if (myBoardData.id) {
+                await db.from('player_boards').update({ marks: myBoardData.marks }).eq('id', myBoardData.id);
+            }
+        }
+
+        function setupListener() {
+            db.channel('live-updates')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, (payload) => {
+                    if (payload.new.is_happened) liveEvents.add(payload.new.event_text);
+                    else liveEvents.delete(payload.new.event_text);
+                    renderBoard(); 
+                }).subscribe();
+        }
 
         init();
     </script>
