@@ -68,7 +68,7 @@
         }
 
         function setupListener() {
-            supabase.channel('live-updates')
+            db.channel('live-updates')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, () => {
                     location.reload(); // Simple way to refresh state
                 }).subscribe();
