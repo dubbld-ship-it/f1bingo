@@ -21,17 +21,17 @@
     <div class="bingo-board" id="board"></div>
 
     <script>
-        const supabase = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+        const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
         let liveEvents = new Set();
 
         async function init() {
             try {
                 // 1. Fetch the master pool
-                const { data: pool, error: poolError } = await supabase.from('f1_events_pool').select('Event');
+                const { data: pool, error: poolError } = await db.from('f1_events_pool').select('Event');
                 if (poolError) throw poolError;
 
                 // 2. Fetch what has already happened
-                const { data: live, error: liveError } = await supabase.from('live_race_state').select('event_text').eq('is_happened', true);
+                const { data: live, error: liveError } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
                 if (liveError) throw liveError;
                 
                 // 3. Update our local set of live events

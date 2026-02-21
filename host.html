@@ -23,11 +23,11 @@
     </div>
 
     <script>
-        const supabase = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+        const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
 
         async function login() {
             const pass = document.getElementById('pass').value;
-            const { data } = await supabase.from('app_config').select('value').eq('key', 'host_password').single();
+            const { data } = await db.from('app_config').select('value').eq('key', 'host_password').single();
             if (data && pass === data.value) {
                 document.getElementById('auth').style.display = 'none';
                 document.getElementById('controls').style.display = 'block';
@@ -36,8 +36,8 @@
         }
 
         async function load() {
-            const { data: pool } = await supabase.from('f1_events_pool').select('*');
-            const { data: live } = await supabase.from('live_race_state').select('*');
+            const { data: pool } = await db.from('f1_events_pool').select('*');
+            const { data: live } = await db.from('live_race_state').select('*');
             const list = document.getElementById('list');
             list.innerHTML = "";
 
@@ -54,7 +54,7 @@
         }
 
         async function toggle(text, status) {
-            await supabase.from('live_race_state').upsert({ event_text: text, is_happened: !status });
+            await db.from('live_race_state').upsert({ event_text: text, is_happened: !status });
             load();
         }
     </script>
