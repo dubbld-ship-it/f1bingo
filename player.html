@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player - F1 Bingo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Re-use your existing Bingo CSS here */
+        :root { --f1-red: #E10600; --f1-dark: #15151E; --f1-grey: #333; }
+        body { font-family: Arial, sans-serif; background: var(--f1-dark); color: white; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .bingo-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: var(--f1-red); padding: 8px; border-radius: 8px; width: 100%; max-width: 500px; }
+        .cell { background: var(--f1-grey); aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 5px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .cell.marked { opacity: 0.5; border: 2px solid white; }
+        .cell.live-happened { background: gold !important; color: black; box-shadow: 0 0 15px gold; }
+        .free-space { background: var(--f1-red); }
+    </style>
+</head>
+<body>
+    <h2 id="status">Loading Board...</h2>
+    <div class="bingo-board" id="board"></div>
+
+    <script>
+        const supabase = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+        let liveEvents = new Set();
+
+        async function init() {
+            try {
+                // 1. Fetch the master pool
+                const { data: pool, error: poolError } = await supabase.from('f1_events_pool').select('Event');
+                if (poolError) throw poolError;
+
+                // 2. Fetch what has already happened
+                const { data: live, error: liveError } = await supabase.from('live_race_state').select('event_text').eq('is_happened', true);
+                if (liveError) throw liveError;
+                
+                // 3. Update our local set of live events
+                live.forEach(l => liveEvents.add(l.event_text));
+                
+                // 4. Build the board layout
+                let shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24).map(e => e.Event);
+                shuffled.splice(12, 0, "FREE SPACE");
+                
+                // 5. Render and start listening
+                render(shuffled);
+                setupListener();
+
+                // The line you caught!
+                document.getElementById('status').innerText = "Race Live"; 
+
+            } catch (err) {
+                console.error("Setup failed:", err);
+                document.getElementById('status').innerText = "Connection Error. Try refreshing!";
+            }
+        }
+
+        function render(board) {
+            const el = document.getElementById('board');
+            el.innerHTML = "";
+            board.forEach(text => {
+                const div = document.createElement('div');
+                div.className = "cell" + (text === "FREE SPACE" ? " free-space" : "");
+                if (liveEvents.has(text)) div.classList.add('live-happened');
+                div.innerText = text;
+                div.onclick = () => div.classList.toggle('marked');
+                el.appendChild(div);
+            });
+        }
+
+        function setupListener() {
+            supabase.channel('live-updates')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, () => {
+                    location.reload(); // Simple way to refresh state
+                }).subscribe();
+        }
+
+        init();
+    </script>
+</body>
+</html>

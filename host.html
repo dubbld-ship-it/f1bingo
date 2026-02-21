@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Host - F1 Race Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #111; color: white; padding: 20px; }
+        .event-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #333; }
+        button { padding: 8px 15px; cursor: pointer; }
+        .btn-on { background: green; color: white; }
+    </style>
+</head>
+<body>
+    <h1>Race Control</h1>
+    <div id="auth">
+        <input type="password" id="pass" placeholder="Secret Key">
+        <button onclick="login()">Login</button>
+    </div>
+    <div id="controls" style="display:none;">
+        <div id="list"></div>
+    </div>
+
+    <script>
+        const supabase = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+
+        async function login() {
+            const pass = document.getElementById('pass').value;
+            const { data } = await supabase.from('app_config').select('value').eq('key', 'host_password').single();
+            if (data && pass === data.value) {
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('controls').style.display = 'block';
+                load();
+            } else { alert("Denied."); }
+        }
+
+        async function load() {
+            const { data: pool } = await supabase.from('f1_events_pool').select('*');
+            const { data: live } = await supabase.from('live_race_state').select('*');
+            const list = document.getElementById('list');
+            list.innerHTML = "";
+
+            pool.forEach(ev => {
+                const active = live.find(l => l.event_text === ev.Event)?.is_happened;
+                const div = document.createElement('div');
+                div.className = "event-row";
+                div.innerHTML = `<span>${ev.text}</span>
+                    <button class="${active ? 'btn-on' : ''}" onclick="toggle('${ev.text}', ${active})">
+                        ${active ? 'HAPPENED' : 'MARK'}
+                    </button>`;
+                list.appendChild(div);
+            });
+        }
+
+        async function toggle(text, status) {
+            await supabase.from('live_race_state').upsert({ event_text: text, is_happened: !status });
+            load();
+        }
+    </script>
+</body>
+</html>
