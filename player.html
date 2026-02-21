@@ -56,46 +56,55 @@
         let selectedCellIndex = null;
         let fullEventPool = [];
 
-        // 2. THE ENGINE (The logic that decides what to show)
         async function init() {
-            // A. Always check what has happened in the race first
+            console.log("Checking for live race state...");
             const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
             live?.forEach(l => liveEvents.add(l.event_text));
             setupListener();
 
-            // B. Security/Persistence Check: Do they have a saved board?
-            if (myBoardData.id) {
+            console.log("Checking for existing board ID:", myBoardData.id);
+            if (myBoardData.id && myBoardData.id !== "null") {
                 loadExistingBoard();
             } else {
-                // This is a new player
+                console.log("No ID found. Starting Setup.");
                 showSetupScreen(); 
             }
         }
 
-        // 3. PERSISTENCE LOGIC (Talking to 'player_boards')
         async function loadExistingBoard() {
+            // FIX: Changed .single() to .maybeSingle() to prevent script crashes
             const { data, error } = await db.from('player_boards')
                 .select('*')
                 .eq('id', myBoardData.id)
-                .single();
+                .maybeSingle();
+
+            if (error) {
+                console.error("Supabase Error:", error.message);
+                showSetupScreen();
+                return;
+            }
 
             if (data) {
+                console.log("Board found! Loading layout.");
                 myBoardData.playerName = data.player_name;
                 myBoardData.layout = data.layout;
                 myBoardData.marks = data.marks || [];
-                isEditing = false; // They are in "Play Mode"
+                isEditing = false;
                 renderBoard();
                 document.getElementById('status').innerText = `Driver: ${data.player_name}`;
             } else {
+                console.log("ID exists but no record in DB. Resetting.");
                 localStorage.removeItem('f1_bingo_id');
                 showSetupScreen();
             }
         }
 
-        // 4. SETUP & MODAL LOGIC (The "Pit Stop" customization)
         async function showSetupScreen() {
             const name = prompt("Enter your Driver Name for the leaderboard:");
-            if (!name) return;
+            if (!name) {
+                document.getElementById('status').innerText = "Refresh to join the race.";
+                return;
+            }
             myBoardData.playerName = name;
 
             const { data: pool } = await db.from('f1_events_pool').select('Event');
@@ -105,31 +114,39 @@
             shuffled.splice(12, 0, "FREE SPACE");
             myBoardData.layout = shuffled;
 
-            isEditing = true; // They are in "Edit Mode"
+            isEditing = true;
             document.getElementById('setup-controls').style.display = 'block';
             renderBoard();
         }
 
-        // ... include the openSwapModal, applySwap, and finalizeBoard functions here ...
-
-        // 5. THE RENDERER (Drawing the actual grid)
         function renderBoard() {
+            console.log("Rendering board grid...");
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
-            // ... use the logic from the previous message ...
+
+            myBoardData.layout.forEach((text, index) => {
+                const cell = document.createElement('div');
+                cell.className = "cell";
+                if (text === "FREE SPACE") cell.classList.add('free-space');
+                if (liveEvents.has(text)) cell.classList.add('live-happened');
+                if (myBoardData.marks.includes(index)) cell.classList.add('marked');
+
+                cell.innerText = text;
+
+                cell.onclick = () => {
+                    if (isEditing) {
+                        if (text === "FREE SPACE") return;
+                        openSwapModal(index);
+                    } else {
+                        toggleMark(index);
+                    }
+                };
+                boardEl.appendChild(cell);
+            });
         }
 
-        // 6. REAL-TIME LISTENER
-        function setupListener() {
-            db.channel('live-updates')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, (payload) => {
-                    if (payload.new.is_happened) liveEvents.add(payload.new.event_text);
-                    else liveEvents.delete(payload.new.event_text);
-                    renderBoard(); 
-                }).subscribe();
-        }
+        // ... (Rest of your toggleMark, openSwapModal, applySwap, and finalizeBoard functions)
 
-        // START THE APP
         init();
     </script>
 </body>
