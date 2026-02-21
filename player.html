@@ -23,54 +23,89 @@
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
         let liveEvents = new Set();
+        let currentBoardLayout = [];
 
         async function init() {
             try {
-                // 1. Fetch the master pool
+                const statusEl = document.getElementById('status');
+                
+                // 1. Fetch Pool (Make sure 'Event' matches your Supabase column name exactly!)
                 const { data: pool, error: poolError } = await db.from('f1_events_pool').select('Event');
                 if (poolError) throw poolError;
+                if (!pool || pool.length < 24) {
+                    statusEl.innerText = "Error: Not enough events in database!";
+                    return;
+                }
 
-                // 2. Fetch what has already happened
-                const { data: live, error: liveError } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
-                if (liveError) throw liveError;
+                // 2. Fetch Live State
+                const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
+                live?.forEach(l => liveEvents.add(l.event_text));
+
+                // 3. Randomize and Build Layout
+                // We shuffle the pool and take 24 items
+                let shuffled = pool
+                    .map(x => x.Event)
+                    .sort(() => 0.5 - Math.random())
+                    .slice(0, 24);
                 
-                // 3. Update our local set of live events
-                live.forEach(l => liveEvents.add(l.event_text));
-                
-                // 4. Build the board layout
-                let shuffled = pool.sort(() => 0.5 - Math.random()).slice(0, 24).map(e => e.Event);
+                // Insert Free Space at index 12 (center)
                 shuffled.splice(12, 0, "FREE SPACE");
-                
-                // 5. Render and start listening
-                render(shuffled);
-                setupListener();
+                currentBoardLayout = shuffled;
 
-                // The line you caught!
-                document.getElementById('status').innerText = "Race Live"; 
+                renderBoard();
+                setupListener();
+                
+                statusEl.innerText = "Race Live";
+                statusEl.style.color = "#00ff00"; // Green for 'Go'
 
             } catch (err) {
-                console.error("Setup failed:", err);
-                document.getElementById('status').innerText = "Connection Error. Try refreshing!";
+                console.error("Initialization error:", err);
+                document.getElementById('status').innerText = "Connection Error. Check Console.";
             }
         }
 
-        function render(board) {
-            const el = document.getElementById('board');
-            el.innerHTML = "";
-            board.forEach(text => {
-                const div = document.createElement('div');
-                div.className = "cell" + (text === "FREE SPACE" ? " free-space" : "");
-                if (liveEvents.has(text)) div.classList.add('live-happened');
-                div.innerText = text;
-                div.onclick = () => div.classList.toggle('marked');
-                el.appendChild(div);
+        function renderBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = "";
+
+            currentBoardLayout.forEach((text, index) => {
+                const cell = document.createElement('div');
+                cell.className = "cell";
+                if (text === "FREE SPACE") cell.classList.add('free-space');
+                
+                // Check if this event has happened live
+                if (liveEvents.has(text)) cell.classList.add('live-happened');
+
+                cell.innerText = text;
+
+                // CLICK LOGIC
+                cell.onclick = (e) => {
+                    // SINGLE CLICK: Mark the cell
+                    cell.classList.toggle('marked');
+                };
+
+                // DOUBLE CLICK: Change the cell (The Swap feature)
+                cell.ondblclick = () => {
+                    if (text === "FREE SPACE") return;
+                    const newEvent = prompt("Enter a custom event or swap idea for this square:", text);
+                    if (newEvent && newEvent !== text) {
+                        currentBoardLayout[index] = newEvent;
+                        renderBoard(); // Re-draw with the new text
+                    }
+                };
+
+                boardEl.appendChild(cell);
             });
         }
 
         function setupListener() {
             db.channel('live-updates')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, () => {
-                    location.reload(); // Simple way to refresh state
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'live_race_state' }, (payload) => {
+                    console.log("Change detected!", payload);
+                    // Instead of a full reload, let's just update our local set
+                    if (payload.new.is_happened) liveEvents.add(payload.new.event_text);
+                    else liveEvents.delete(payload.new.event_text);
+                    renderBoard(); 
                 }).subscribe();
         }
 
