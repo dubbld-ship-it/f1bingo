@@ -71,8 +71,16 @@
             }
         }
 
+        function updateStatus(message) {
+            const statusEl = document.getElementById('status');
+            if (statusEl) {
+                statusEl.innerText = message;
+            }
+        }
+
         // 2. DATA LOADING
         async function loadExistingBoard() {
+            updateStatus("Syncing Board from DB..."); 
             const { data, error } = await db.from('player_boards')
                 .select('*')
                 .eq('id', myBoardData.id)
@@ -104,6 +112,7 @@
             shuffled.splice(12, 0, "FREE SPACE");
             myBoardData.layout = shuffled;
 
+            updateStatus("Drafting Your Board..."); 
             isEditing = true;
             document.getElementById('setup-controls').style.display = 'block';
             renderBoard();
@@ -131,6 +140,7 @@
         }
 
         async function finalizeBoard() {
+            updateStatus("Registering with Race Control..."); 
             const { data, error } = await db.from('player_boards').insert({
                 player_name: myBoardData.playerName,
                 layout: myBoardData.layout,
@@ -143,6 +153,9 @@
                 isEditing = false;
                 document.getElementById('setup-controls').style.display = 'none';
                 renderBoard();
+                updateStatus('Good to go: ${myBoardData.playerName}'); 
+            } else {
+                updateStatus("Registration failed..."); 
             }
         }
 
