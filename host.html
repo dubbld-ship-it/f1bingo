@@ -109,7 +109,16 @@
 
                 // 1. Create the text label
                 const span = document.createElement('span');
-                span.innerHTML = `${ev.Event} <small style="color: #888;">(${ev.points || 1}pts)</small>`;
+                span.style.display = "flex";
+                span.style.justifyContent = "space-between";
+                span.style.width = "70%"; // Give it some room
+
+                span.innerHTML = `
+                    <span>${ev.Event}</span>
+                    <span style="color: #ffc107; font-size: 0.8rem; border: 1px solid #444; padding: 2px 6px; border-radius: 10px;">
+                        ${ev.points || 1}pts
+                    </span>
+                `;
 
                 // 2. Create the button object
                 const btn = document.createElement('button');
