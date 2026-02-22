@@ -74,7 +74,15 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
-        
+   
+        const rarityColors = {
+            1: "#ffffff", // Common
+            2: "#3c7a3e", // Uncommon
+            3: "#19629e", // Rare
+            4: "#9c27b0", // Epic
+            5: "#910C0C"  // Chaos
+        };
+
         let liveEvents = new Set();
         let myBoardData = {
             id: localStorage.getItem('f1_bingo_id'), 
@@ -94,7 +102,11 @@
         ];
 
         async function init() {
-            // Get initial "Happened" state from DB
+            // 1. Fetch points/pool FIRST so renderBoard always has data
+            const { data: pool } = await db.from('f1_events_pool').select('Event, points');
+            fullEventPool = pool || [];
+
+            // 2. Get initial "Happened" state
             const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
             live?.forEach(l => liveEvents.add(l.event_text));
             
@@ -127,12 +139,14 @@
             if (!name) return;
             myBoardData.playerName = name;
 
-            const { data: pool } = await db.from('f1_events_pool').select('Event');
-            fullEventPool = pool.map(x => x.Event);
+            const { data: pool } = await db.from('f1_events_pool').select('Event, points');
+            // fullEventPool = pool.map(x => x.Event);
+            fullEventPool = pool;
 
             let shuffled = [...fullEventPool].sort(() => 0.5 - Math.random()).slice(0, 24);
             shuffled.splice(12, 0, "FREE SPACE");
-            myBoardData.layout = shuffled;
+            // myBoardData.layout = shuffled;
+            myBoardData.layout = shuffled.map(x => x.Event);
 
             isEditing = true;
             document.getElementById('setup-controls').style.display = 'block';
@@ -143,20 +157,44 @@
         function renderBoard() {
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
+            let currentScore = 0;
             
             myBoardData.layout.forEach((text, index) => {
                 const cell = document.createElement('div');
                 cell.className = "cell";
                 
-                if (text === "FREE SPACE") cell.classList.add('free-space');
-                // IMPORTANT: This turns the square GOLD if the Host marked it
-                if (liveEvents.has(text)) cell.classList.add('live-happened');
+                // Find the event in our pool to get its points
+                const eventData = fullEventPool.find(e => e.Event === text);
+                const pts = eventData ? (eventData.points || 1) : 0; // 0 for Free Space
+                const color = rarityColors[pts] || "#ffffff";
+
+                if (text === "FREE SPACE") {
+                    cell.classList.add('free-space');
+                } else {
+                    // Apply the rarity color to the text
+                    cell.style.color = color;
+                    // Add a very subtle glow if it's a high-value square
+                    if (pts >= 4) cell.style.textShadow = `0 0 5px ${color}66`;
+                }
+
+                if (liveEvents.has(text)) {
+                    cell.classList.add('live-happened');
+                    cell.style.color = "black"; // Contrast for the gold background
+                    currentScore += pts;
+                }
+                
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
                 
                 cell.innerText = text;
                 cell.onclick = () => isEditing ? openSwapModal(index) : toggleMark(index);
                 boardEl.appendChild(cell);
             });
+
+            // Update Score Display
+            const statusEl = document.getElementById('status');
+            if (!isEditing) {
+                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
+            }
 
             checkWinCondition();
         }
@@ -199,10 +237,14 @@
             selectedCellIndex = index;
             const picker = document.getElementById('event-picker');
             picker.innerHTML = "";
+            
             fullEventPool.forEach(ev => {
-                if (!myBoardData.layout.includes(ev)) {
+                if (!myBoardData.layout.includes(ev.Event)) {
                     let opt = document.createElement('option');
-                    opt.value = opt.innerHTML = ev;
+                    opt.value = ev.Event;
+                    opt.innerHTML = `${ev.Event} (${ev.points || 1} pts)`;
+                    // Set the color in the dropdown
+                    opt.style.color = rarityColors[ev.points || 1];
                     picker.appendChild(opt);
                 }
             });
