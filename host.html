@@ -91,22 +91,14 @@
 
             pool.sort((a, b) => a.Event.localeCompare(b.Event));
 
-            // pool.forEach(ev => {
-            //     const active = live.find(l => l.event_text === ev.Event)?.is_happened;
-            //     const div = document.createElement('div');
-            //     div.className = "event-row";
-            //     // Store the text in a data attribute for easy searching
-            //     div.setAttribute('data-event', ev.Event.toLowerCase());
-            //     div.innerHTML = `<span>${ev.Event}</span>
-            //         <button class="${active ? 'btn-on' : 'btn-mark'}" onclick="toggle('${ev.Event}', ${!!active})">
-            //             ${active ? 'HAPPENED' : 'MARK'}
-            //         </button>`;
-            //     list.appendChild(div);
-            // });
             pool.forEach(ev => {
                 const active = live.find(l => l.event_text === ev.Event)?.is_happened;
                 const div = document.createElement('div');
                 div.className = "event-row";
+
+                // 1. RE-ADD THE SEARCH HOOK:
+                // This is what the filterEvents() function looks for
+                div.setAttribute('data-event', ev.Event.toLowerCase());
 
                 // 1. Create the text label
                 const span = document.createElement('span');
