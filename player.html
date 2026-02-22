@@ -139,14 +139,22 @@
             if (!name) return;
             myBoardData.playerName = name;
 
+            // Fetch pool (ensure 'points' is lowercase to match your DB)
             const { data: pool } = await db.from('f1_events_pool').select('Event, points');
-            // fullEventPool = pool.map(x => x.Event);
+            if (!pool) { alert("Error connecting to Race Control."); return; }
+            
             fullEventPool = pool;
 
+            // Shuffle and pick 24
             let shuffled = [...fullEventPool].sort(() => 0.5 - Math.random()).slice(0, 24);
-            shuffled.splice(12, 0, "FREE SPACE");
-            // myBoardData.layout = shuffled;
-            myBoardData.layout = shuffled.map(x => x.Event);
+
+            // Convert objects to just the Event strings FIRST
+            let layoutStrings = shuffled.map(x => x.Event);
+            
+            // NOW insert the Free Space string at index 12 (the dead center)
+            layoutStrings.splice(12, 0, "FREE SPACE");
+
+            myBoardData.layout = layoutStrings;
 
             isEditing = true;
             document.getElementById('setup-controls').style.display = 'block';
@@ -179,20 +187,39 @@
 
                 if (liveEvents.has(text)) {
                     cell.classList.add('live-happened');
-                    cell.style.color = "black"; // Contrast for the gold background
+                    cell.style.color = color; // Contrast for the gold background
                     currentScore += pts;
+                }
+                else {
+                    // RESET the color to rarity color if it's not live
+                    cell.classList.remove('live-happened');
+                    cell.style.color = (text === "FREE SPACE") ? "white" : color;
                 }
                 
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
                 
                 cell.innerText = text;
-                cell.onclick = () => isEditing ? openSwapModal(index) : toggleMark(index);
+                // cell.onclick = () => isEditing ? openSwapModal(index) : toggleMark(index);
+                cell.onclick = () => {
+                    if (text === "FREE SPACE") return; // Absolute block
+                    isEditing ? openSwapModal(index) : toggleMark(index);
+                };
                 boardEl.appendChild(cell);
             });
 
             // Update Score Display
             const statusEl = document.getElementById('status');
             if (!isEditing) {
+                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
+            }
+
+            if (isEditing) {
+                statusEl.innerText = "Drafting Your Board... Current Potential: " + 
+                myBoardData.layout.reduce((acc, txt) => {
+                    const d = fullEventPool.find(e => e.Event === txt);
+                    return acc + (d ? (d.points || 1) : 0);
+                }, 0) + " pts";
+            } else {
                 statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
             }
 
