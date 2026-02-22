@@ -63,11 +63,11 @@
             <h2 style="margin-top:0;">New Pool Event</h2>
             <input type="text" id="new-event-text" placeholder="e.g. Hamilton overtakes Perez">
             <select id="new-event-points" style="width: 100%; padding: 12px; margin-bottom: 15px; background: #111; color: white; border: 1px solid #444;">
-                <option value="1">1 Point (Common)</option>
-                <option value="2">2 Points</option>
-                <option value="3">3 Points (Rare)</option>
-                <option value="4">4 Points</option>
-                <option value="5">5 Points (Epic/Chaos)</option>
+                <option value="1" style="color: #ffffff;">1 Point (Common)</option>
+                <option value="2" style="color: #3c7a3e;">2 Points (Uncommon)</option>
+                <option value="3" style="color: #19629e;">3 Points (Rare)</option>
+                <option value="4" style="color: #9c27b0;">4 Points (Epic)</option>
+                <option value="5" style="color: #910C0C;">5 Points (CHAOS)</option>
             </select>
             <div class="modal-actions">
                 <button onclick="closeModal()" style="background:#555; color:white;">Cancel</button>
@@ -78,6 +78,14 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+
+        const rarityColors = {
+            1: "#ffffff", // Common (White)
+            2: "#4caf50", // Uncommon (Green)
+            3: "#2196f3", // Rare (Blue)
+            4: "#9c27b0", // Epic (Purple)
+            5: "#ff1100"  // Chaos (Dark Red)
+        };
 
         async function login() {
             const pass = document.getElementById('pass').value;
@@ -100,6 +108,11 @@
 
             pool.forEach(ev => {
                 const active = live.find(l => l.event_text === ev.Event)?.is_happened;
+                
+                // 1. Determine the point value and the corresponding color
+                const pts = ev.points || 1;
+                const badgeColor = rarityColors[pts] || "#ffffff"; // Fallback to white
+                
                 const div = document.createElement('div');
                 div.className = "event-row";
 
@@ -111,12 +124,13 @@
                 const span = document.createElement('span');
                 span.style.display = "flex";
                 span.style.justifyContent = "space-between";
+                span.style.alignItems = "center";
                 span.style.width = "70%"; // Give it some room
 
                 span.innerHTML = `
                     <span>${ev.Event}</span>
-                    <span style="color: #ffc107; font-size: 0.8rem; border: 1px solid #444; padding: 2px 6px; border-radius: 10px;">
-                        ${ev.points || 1}pts
+                    <span style="color: ${badgeColor}; border: 1px solid ${badgeColor}44; font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; font-weight: bold; background: ${badgeColor}11;">
+                        ${pts} PTS
                     </span>
                 `;
 
