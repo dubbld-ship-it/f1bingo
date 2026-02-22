@@ -36,11 +36,24 @@
         </div>
     </div>
 
+    <div id="win-overlay" class="win-overlay">
+        <div class="win-card">
+            <h1>You Win!</h1>
+            <p id="win-message">You completed 5 in a row.</p>
+            <button onclick="dismissWinOverlay()">Keep Playing</button>
+        </div>
+    </div>
+
     <style>
         /* Modal Styles */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
         .modal-content { background: var(--f1-dark); padding: 30px; border: 2px solid var(--f1-red); border-radius: 8px; width: 90%; max-width: 400px; text-align: center; }
         #event-picker { width: 100%; padding: 10px; background: #222; color: white; border: 1px solid #555; }
+        .win-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: rgba(0, 0, 0, 0.9); align-items: center; justify-content: center; padding: 20px; }
+        .win-card { width: 100%; max-width: 460px; background: var(--f1-dark); border: 3px solid var(--f1-red); border-radius: 12px; text-align: center; padding: 36px 24px; box-shadow: 0 0 20px rgba(225, 6, 0, 0.5); }
+        .win-card h1 { margin: 0 0 12px; font-size: 2.2rem; color: var(--f1-red); }
+        .win-card p { margin: 0 0 24px; font-size: 1.1rem; }
+        .win-card button { padding: 10px 16px; background: var(--f1-red); color: white; border: 0; border-radius: 6px; cursor: pointer; font-weight: bold; }
     </style>
     <script>
         // 1. CREDENTIALS & GLOBAL STATE
@@ -55,6 +68,21 @@
         let isEditing = false;
         let selectedCellIndex = null;
         let fullEventPool = [];
+        let winOverlayDismissed = false;
+        const WINNING_LINES = [
+            [0, 1, 2, 3, 4],
+            [5, 6, 7, 8, 9],
+            [10, 11, 12, 13, 14],
+            [15, 16, 17, 18, 19],
+            [20, 21, 22, 23, 24],
+            [0, 5, 10, 15, 20],
+            [1, 6, 11, 16, 21],
+            [2, 7, 12, 17, 22],
+            [3, 8, 13, 18, 23],
+            [4, 9, 14, 19, 24],
+            [0, 6, 12, 18, 24],
+            [4, 8, 12, 16, 20]
+        ];
 
         // 1. STARTUP
         async function init() {
@@ -75,6 +103,33 @@
             const statusEl = document.getElementById('status');
             if (statusEl) {
                 statusEl.innerText = message;
+            }
+        }
+
+        function hasBingo() {
+            if (myBoardData.layout.length !== 25) return false;
+            const marked = new Set(myBoardData.marks);
+            if (myBoardData.layout[12] === "FREE SPACE") marked.add(12);
+            return WINNING_LINES.some(line => line.every(index => marked.has(index)));
+        }
+
+        function dismissWinOverlay() {
+            winOverlayDismissed = true;
+            document.getElementById('win-overlay').style.display = 'none';
+        }
+
+        function updateWinOverlay() {
+            const overlay = document.getElementById('win-overlay');
+            const bingo = !isEditing && hasBingo();
+            if (!bingo) {
+                winOverlayDismissed = false;
+                overlay.style.display = 'none';
+                return;
+            }
+            if (!winOverlayDismissed) {
+                const name = myBoardData.playerName || "Driver";
+                document.getElementById('win-message').innerText = `${name}, you completed 5 in a row!`;
+                overlay.style.display = 'flex';
             }
         }
 
@@ -139,6 +194,11 @@
             renderBoard();
         }
 
+        function closeModal() {
+            selectedCellIndex = null;
+            document.getElementById('swap-modal').style.display = 'none';
+        }
+
         async function finalizeBoard() {
             updateStatus("Registering with Race Control..."); 
             const { data, error } = await db.from('player_boards').insert({
@@ -177,6 +237,7 @@
                 };
                 boardEl.appendChild(cell);
             });
+            updateWinOverlay();
         }
 
         // 5. MARKS & REAL-TIME
