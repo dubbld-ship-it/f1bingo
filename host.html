@@ -6,20 +6,67 @@
     <title>Host - F1 Race Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: Arial, sans-serif; background: #111; color: white; padding: 20px; }
-        .event-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #333; }
-        button { padding: 8px 15px; cursor: pointer; }
-        .btn-on { background: green; color: white; }
+        :root { --f1-red: #e10600; --f1-dark: #1f1f27; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #111; color: white; padding: 20px; }
+        
+        .header-container { position: relative; border-bottom: 2px solid var(--f1-red); margin-bottom: 10px; padding-bottom: 10px; }
+        
+        .btn-add-main { 
+            position: absolute; right: 0; top: 10px; 
+            background: var(--f1-red); color: white; border: none; 
+            padding: 10px 20px; font-weight: bold; border-radius: 4px; 
+        }
+
+        /* Search Bar Styling */
+        #search-container { margin-bottom: 20px; }
+        #event-search { 
+            width: 100%; padding: 12px; background: #222; color: white; 
+            border: 1px solid #444; border-radius: 4px; box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        .event-row { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #333; transition: background 0.2s; }
+        .event-row.hidden { display: none; }
+        .event-row:hover { background: #1a1a1a; }
+        
+        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
+        .btn-on { background: #ffc107; color: black; } 
+        .btn-mark { background: #444; color: white; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; }
+        .modal-content { background: var(--f1-dark); padding: 30px; border: 2px solid var(--f1-red); border-radius: 8px; width: 90%; max-width: 400px; }
+        .modal-content input { width: 100%; padding: 12px; margin: 15px 0; background: #111; color: white; border: 1px solid #444; box-sizing: border-box; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
     </style>
 </head>
 <body>
-    <h1>Race Control</h1>
-    <div id="auth">
-        <input type="password" id="pass" placeholder="Secret Key">
-        <button onclick="login()">Login</button>
+
+    <div class="header-container">
+        <h1>Race Control</h1>
+        <button id="add-event-trigger" class="btn-add-main" style="display:none;" onclick="openModal()">+ ADD EVENT</button>
     </div>
+
+    <div id="auth">
+        <input type="password" id="pass" placeholder="Secret Key" style="padding: 8px;">
+        <button onclick="login()" style="background: var(--f1-red); color: white;">Login</button>
+    </div>
+
     <div id="controls" style="display:none;">
+        <div id="search-container">
+            <input type="text" id="event-search" placeholder="Search events (e.g. 'Safety Car' or 'Max')..." onkeyup="filterEvents()">
+        </div>
         <div id="list"></div>
+    </div>
+
+    <div id="add-modal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">New Pool Event</h2>
+            <input type="text" id="new-event-text" placeholder="e.g. Hamilton overtakes Perez">
+            <div class="modal-actions">
+                <button onclick="closeModal()" style="background:#555; color:white;">Cancel</button>
+                <button onclick="saveNewEvent()" style="background:var(--f1-red); color:white;">Add to Race</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -31,6 +78,7 @@
             if (data && pass === data.value) {
                 document.getElementById('auth').style.display = 'none';
                 document.getElementById('controls').style.display = 'block';
+                document.getElementById('add-event-trigger').style.display = 'block';
                 load();
             } else { alert("Denied."); }
         }
@@ -41,21 +89,62 @@
             const list = document.getElementById('list');
             list.innerHTML = "";
 
+            pool.sort((a, b) => a.Event.localeCompare(b.Event));
+
             pool.forEach(ev => {
                 const active = live.find(l => l.event_text === ev.Event)?.is_happened;
                 const div = document.createElement('div');
                 div.className = "event-row";
+                // Store the text in a data attribute for easy searching
+                div.setAttribute('data-event', ev.Event.toLowerCase());
                 div.innerHTML = `<span>${ev.Event}</span>
-                    <button class="${active ? 'btn-on' : ''}" onclick="toggle('${ev.Event}', ${active})">
+                    <button class="${active ? 'btn-on' : 'btn-mark'}" onclick="toggle('${ev.Event}', ${!!active})">
                         ${active ? 'HAPPENED' : 'MARK'}
                     </button>`;
                 list.appendChild(div);
+            });
+            // Re-apply filter in case search bar has text
+            filterEvents();
+        }
+
+        // New Filtering Function
+        function filterEvents() {
+            const query = document.getElementById('event-search').value.toLowerCase();
+            const rows = document.querySelectorAll('.event-row');
+            
+            rows.forEach(row => {
+                const text = row.getAttribute('data-event');
+                if (text.includes(query)) {
+                    row.classList.remove('hidden');
+                } else {
+                    row.classList.add('hidden');
+                }
             });
         }
 
         async function toggle(text, status) {
             await db.from('live_race_state').upsert({ event_text: text, is_happened: !status });
             load();
+        }
+
+        function openModal() { document.getElementById('add-modal').style.display = 'flex'; }
+        function closeModal() { 
+            document.getElementById('add-modal').style.display = 'none'; 
+            document.getElementById('new-event-text').value = "";
+        }
+
+        async function saveNewEvent() {
+            const text = document.getElementById('new-event-text').value.trim();
+            if (!text) return;
+            const { error: poolErr } = await db.from('f1_events_pool').insert([{ Event: text }]);
+            const { error: liveErr } = await db.from('live_race_state').insert([{ event_text: text, is_happened: false }]);
+
+            if (!poolErr && !liveErr) {
+                closeModal();
+                load();
+            } else {
+                alert("Error adding event.");
+            }
         }
     </script>
 </body>
