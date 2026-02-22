@@ -11,7 +11,7 @@
         body { font-family: Arial, sans-serif; background: var(--f1-dark); color: white; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .bingo-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: var(--f1-red); padding: 8px; border-radius: 8px; width: 100%; max-width: 500px; }
         .cell { background: var(--f1-grey); aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 5px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; font-weight: bold; box-sizing: border-box; }
-        .cell.marked { background: #7a2424; color: #ffd0d0; box-shadow: inset 0 0 0 2px white; }
+        .cell.marked { opacity: 0.5; box-shadow: inset 0 0 0 2px white; }
         .cell.live-happened { background: gold !important; color: black; box-shadow: 0 0 15px gold; }
         .free-space { background: var(--f1-red); }
     </style>
