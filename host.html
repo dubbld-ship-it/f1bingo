@@ -141,7 +141,7 @@
 
                 // 3. Attach the event directly to the object (No quotes needed!)
                 btn.addEventListener('click', () => {
-                    toggle(ev.Event, !!active);
+                    toggle(ev.Event, !!active, pts);
                 });
 
                 // 4. Put it all together
@@ -168,9 +168,19 @@
             });
         }
 
-        async function toggle(text, status) {
-            await db.from('live_race_state').upsert({ event_text: text, is_happened: !status });
-            load();
+        async function toggle(text, status, pointsValue) {
+            // We include points in the upsert so the table stays updated
+            const { error } = await db.from('live_race_state').upsert({ 
+                event_text: text, 
+                is_happened: !status,
+                points: pointsValue 
+            });
+
+            if (error) {
+                console.error("Error toggling event:", error);
+            } else {
+                load();
+            }
         }
 
         function openModal() { document.getElementById('add-modal').style.display = 'flex'; }
