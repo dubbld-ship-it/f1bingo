@@ -38,9 +38,19 @@
     
     <div class="bingo-board" id="board"></div>
 
-    <div id="setup-controls" style="display:none;">
-        <p>Double-click a cell to swap it!</p>
-        <button onclick="finalizeBoard()" style="background: #28a745;">Finish & Register Board</button>
+    <div id="setup-controls" style="display:none; margin: 20px; padding: 15px; border: 1px dashed #555; border-radius: 8px; background: rgba(255,255,255,0.05);">
+        <p style="margin-top: 0;"><strong>Drafting Mode:</strong> Double-click a cell to swap it.</p>
+        
+        <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center;">
+            <button onclick="finalizeBoard()" style="background: #28a745; font-size: 1.1rem; padding: 12px 24px;">Lock-in & Register Board</button>
+            
+            <div style="max-width: 300px; text-align: left; font-size: 0.85rem; color: #bbb; line-height: 1.4;">
+                <span style="color: #ffc107; font-weight: bold;">⚠️ Warning:</span> 
+                Once locked in, you can no longer edit these squares. 
+                Remember the name you've given to refer back to this later. 
+                There is no editing allowed after registering.
+            </div>
+        </div>
     </div>
 
     <div id="swap-modal" class="modal">
@@ -221,7 +231,7 @@
                 myBoardData.id = data.id;
                 isEditing = false;
                 document.getElementById('setup-controls').style.display = 'none';
-                document.getElementById('status').innerText = `Driver: ${data.player_name}`;
+                document.getElementById('status').innerHTML = `Driver Profile: <span style="color:gold;">${data.player_name}</span> (Locked)`;
                 renderBoard();
             }
         }
