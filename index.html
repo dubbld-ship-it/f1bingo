@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>F1 Bingo - Join the Race</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,400;0,700;1,700&display=swap" rel="stylesheet">
     <style>
         :root { --f1-red: #e10600; --f1-black: #15151e; --f1-dark: #1f1f27; }
         body { background-color: var(--f1-black); color: white; font-family: 'Titillium Web', sans-serif; text-align: center; padding: 50px 20px; }
@@ -46,26 +47,34 @@
     const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
 
     async function recoverBoard() {
-        const name = document.getElementById('recover-name').value.trim();
-        if (!name) return alert("Please enter your name!");
+        const nameInput = document.getElementById('recover-name');
+        const recoverBtn = document.querySelector('.btn-recover');
+        const name = nameInput.value.trim();
 
-        // Search for the latest board with this name
+        if (!name) return alert("Please enter your Driver Name!");
+
+        // UI Feedback
+        recoverBtn.innerText = "Searching Grid...";
+        recoverBtn.disabled = true;
+
+        // Search for the unique board
         const { data, error } = await db.from('player_boards')
             .select('id')
             .eq('player_name', name)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+            .maybeSingle(); // We use maybeSingle because names are now unique
 
         if (error) {
             console.error(error);
-            alert("Error searching for board.");
+            alert("Telemetry error. Please try again.");
+            recoverBtn.innerText = "Find My Board";
+            recoverBtn.disabled = false;
         } else if (data) {
-            // Save the ID to localStorage so player.html knows who this is
             localStorage.setItem('f1_bingo_id', data.id);
             window.location.href = 'player.html';
         } else {
-            alert("No board found for that name. Try starting a new one!");
+            alert("Driver not found in the standings. Check your spelling or start a new board!");
+            recoverBtn.innerText = "Find My Board";
+            recoverBtn.disabled = false;
         }
     }
 </script>

@@ -289,8 +289,28 @@
         }
 
         async function finalizeBoard() {
+            const name = myBoardData.playerName;
+
+            // 1. Security Check: Does this name already exist in the DB?
+            const { data: existing, error: checkError } = await db
+                .from('player_boards')
+                .select('id')
+                .eq('player_name', name)
+                .maybeSingle();
+
+            if (existing) {
+                alert("This Driver Name is already registered! Please refresh and choose a unique name (e.g., " + name + " #2).");
+                return; // Stop the registration
+            }
+
+            if (checkError) {
+                console.error("Database check failed:", checkError);
+                return;
+            }
+
+            // 2. Proceed with registration if name is unique
             const { data, error } = await db.from('player_boards').insert({
-                player_name: myBoardData.playerName,
+                player_name: name,
                 layout: myBoardData.layout,
                 marks: []
             }).select().single();
