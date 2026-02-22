@@ -181,16 +181,25 @@
 
         async function saveNewEvent() {
             const text = document.getElementById('new-event-text').value.trim();
-            const points = parseInt(document.getElementById('new-event-points').value); // Get points
+            // 1. Grab the points value from the dropdown
+            const pointsVal = parseInt(document.getElementById('new-event-points').value);
+
             if (!text) return;
-            const { error: poolErr } = await db.from('f1_events_pool').insert([{ Event: text }]);
-            const { error: liveErr } = await db.from('live_race_state').insert([{ event_text: text, is_happened: false }]);
+
+            // 2. Include the 'points' column in the insert
+            const { error: poolErr } = await db.from('f1_events_pool')
+                .insert([{ Event: text, points: pointsVal }]);
+                
+            // Also update the live_race_state so it has the point value ready for the player
+            const { error: liveErr } = await db.from('live_race_state')
+                .insert([{ event_text: text, is_happened: false, points: pointsVal }]);
 
             if (!poolErr && !liveErr) {
                 closeModal();
                 load();
             } else {
-                alert("Error adding event.");
+                console.error("Pool Error:", poolErr, "Live Error:", liveErr);
+                alert("Error adding event. Check console for details.");
             }
         }
     </script>
