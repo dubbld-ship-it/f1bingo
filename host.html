@@ -49,6 +49,52 @@
             border: 1px solid #444;
             border-radius: 4px;
         }
+        #end-race-btn {
+            background: #d32f2f;
+            color: #fff;
+            margin-left: auto;
+        }
+        #end-race-btn:disabled {
+            opacity: 0.7;
+            cursor: wait;
+        }
+        #leaderboard-container {
+            margin-top: 22px;
+            border-top: 1px solid #333;
+            padding-top: 16px;
+        }
+        #leaderboard-container h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.15rem;
+        }
+        #leaderboard-status {
+            color: #bbb;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        #leaderboard-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #171717;
+            border: 1px solid #333;
+            display: none;
+        }
+        #leaderboard-table th, #leaderboard-table td {
+            padding: 10px;
+            border-bottom: 1px solid #2b2b2b;
+            text-align: left;
+        }
+        #leaderboard-table th {
+            color: #ddd;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            background: #1d1d1d;
+        }
+        #leaderboard-table td:last-child,
+        #leaderboard-table th:last-child {
+            text-align: right;
+        }
         
         button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
         .btn-on { background: #ffc107; color: black; } 
@@ -78,11 +124,27 @@
             <select id="race-select" onchange="saveSelectedRace()" disabled>
                 <option>Loading races...</option>
             </select>
+            <button id="end-race-btn" onclick="endRace()">END RACE</button>
         </div>
         <div id="search-container">
             <input type="text" id="event-search" placeholder="Search events (e.g. 'Safety Car' or 'Max')..." onkeyup="filterEvents()">
         </div>
         <div id="list"></div>
+        <div id="leaderboard-container">
+            <h2>Leaderboard</h2>
+            <div id="leaderboard-status">Select a race to view leaderboard results.</div>
+            <table id="leaderboard-table">
+                <thead>
+                    <tr>
+                        <th>Pos</th>
+                        <th>Driver</th>
+                        <th>Events Hit</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body"></tbody>
+            </table>
+        </div>
     </div>
 
     <div id="add-modal" class="modal">
@@ -149,7 +211,8 @@
                 document.getElementById('controls').style.display = 'block';
                 document.getElementById('add-event-trigger').style.display = 'block';
                 await initRaceSelector();
-                load();
+                await load();
+                await loadLeaderboard();
             } else { alert("Denied."); }
         }
 
@@ -238,8 +301,9 @@
         }
 
         async function saveSelectedRace() {
-            const raceName = document.getElementById('race-select').value;
+            const raceName = getSelectedRaceName();
             updateHostTitle(raceName);
+            await loadLeaderboard();
             if (!raceName) return;
 
             const { data: updatedRows, error: updateErr } = await db
@@ -263,6 +327,23 @@
                     alert('Could not save selected race.');
                 }
             }
+
+            await loadLeaderboard();
+        }
+
+        function getSelectedRaceName() {
+            const select = document.getElementById('race-select');
+            return (select?.value || '').trim();
+        }
+
+        function getSelectedRaceRound() {
+            const select = document.getElementById('race-select');
+            const raceName = getSelectedRaceName();
+            if (!select || !raceName) return null;
+
+            const options = Array.from(select.options).filter(opt => !!opt.value);
+            const idx = options.findIndex(opt => opt.value === raceName);
+            return idx >= 0 ? idx + 1 : null;
         }
 
         async function load() {
@@ -366,6 +447,179 @@
                 console.error("Pool Error:", poolErr, "Live Error:", liveErr);
                 alert("Error adding event. Check console for details.");
             }
+        }
+
+        function buildLeaderboardRows(raceName, raceRound, boards, liveRows) {
+            const pointsByEvent = new Map();
+            (liveRows || []).forEach(row => {
+                if (!row?.event_text) return;
+                const parsed = Number(row.points);
+                const pts = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+                pointsByEvent.set(row.event_text, pts);
+            });
+
+            const rows = (boards || []).map(board => {
+                const layout = Array.isArray(board.layout) ? board.layout : [];
+                let score = 0;
+                let eventsHit = 0;
+
+                layout.forEach(eventText => {
+                    if (eventText === 'FREE SPACE') return;
+                    if (!pointsByEvent.has(eventText)) return;
+
+                    score += pointsByEvent.get(eventText);
+                    eventsHit += 1;
+                });
+
+                return {
+                    race_name: raceName,
+                    race_round: raceRound,
+                    player_id: String(board.id),
+                    player_name: board.player_name || 'Unknown Driver',
+                    score,
+                    events_hit: eventsHit
+                };
+            });
+
+            rows.sort((a, b) => {
+                if (b.score !== a.score) return b.score - a.score;
+                if (b.events_hit !== a.events_hit) return b.events_hit - a.events_hit;
+                return a.player_name.localeCompare(b.player_name);
+            });
+
+            return rows.map((row, idx) => ({ ...row, position: idx + 1 }));
+        }
+
+        async function endRace() {
+            const raceName = getSelectedRaceName();
+            const raceRound = getSelectedRaceRound();
+            if (!raceName) {
+                alert('Select a race before ending it.');
+                return;
+            }
+
+            const ok = confirm(`End "${raceName}" and save leaderboard results for all drivers?`);
+            if (!ok) return;
+
+            const endRaceBtn = document.getElementById('end-race-btn');
+            endRaceBtn.disabled = true;
+            endRaceBtn.innerText = 'ENDING...';
+
+            try {
+                const { data: liveRows, error: liveErr } = await db
+                    .from('live_race_state')
+                    .select('event_text, points')
+                    .eq('is_happened', true);
+
+                if (liveErr) {
+                    throw new Error(`Could not load race events: ${liveErr.message}`);
+                }
+
+                const { data: boards, error: boardErr } = await db
+                    .from('player_boards')
+                    .select('id, player_name, layout');
+
+                if (boardErr) {
+                    throw new Error(`Could not load player boards: ${boardErr.message}`);
+                }
+
+                const leaderboardRows = buildLeaderboardRows(raceName, raceRound, boards || [], liveRows || []);
+
+                const { error: deleteErr } = await db
+                    .from('leaderboard')
+                    .delete()
+                    .eq('race_name', raceName);
+
+                if (deleteErr) {
+                    throw new Error(`Could not clear previous leaderboard entries: ${deleteErr.message}`);
+                }
+
+                if (leaderboardRows.length > 0) {
+                    const { error: insertErr } = await db
+                        .from('leaderboard')
+                        .insert(leaderboardRows);
+
+                    if (insertErr) {
+                        throw new Error(`Could not save leaderboard rows: ${insertErr.message}`);
+                    }
+                }
+
+                await loadLeaderboard();
+                alert(`Race ended. Saved ${leaderboardRows.length} leaderboard result(s) for ${raceName}.`);
+            } catch (err) {
+                console.error('Failed to end race:', err);
+                const msg = err?.message || 'See console for details.';
+                const rlsHint = /row-level security policy/i.test(msg)
+                    ? '\n\nRLS fix: run leaderboard.sql in Supabase SQL Editor to create leaderboard policies.'
+                    : '';
+                alert(`Failed to end race. ${msg}\n\nExpected leaderboard columns: race_name, race_round, player_id, player_name, score, events_hit, position.${rlsHint}`);
+            } finally {
+                endRaceBtn.disabled = false;
+                endRaceBtn.innerText = 'END RACE';
+            }
+        }
+
+        function renderLeaderboard(rows, raceName) {
+            const statusEl = document.getElementById('leaderboard-status');
+            const tableEl = document.getElementById('leaderboard-table');
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+
+            if (!rows.length) {
+                tableEl.style.display = 'none';
+                statusEl.innerText = `No leaderboard results saved yet for ${raceName}.`;
+                return;
+            }
+
+            rows.forEach((row, index) => {
+                const tr = document.createElement('tr');
+                const pos = row.position || (index + 1);
+                const hitCount = row.events_hit || 0;
+                const score = row.score || 0;
+
+                tr.innerHTML = `
+                    <td>${pos}</td>
+                    <td>${row.player_name || 'Unknown Driver'}</td>
+                    <td>${hitCount}</td>
+                    <td>${score}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            statusEl.innerText = `${rows.length} driver result(s) recorded for ${raceName}.`;
+            tableEl.style.display = 'table';
+        }
+
+        async function loadLeaderboard() {
+            const raceName = getSelectedRaceName();
+            const statusEl = document.getElementById('leaderboard-status');
+            const tableEl = document.getElementById('leaderboard-table');
+            const tbody = document.getElementById('leaderboard-body');
+            tbody.innerHTML = '';
+
+            if (!raceName) {
+                tableEl.style.display = 'none';
+                statusEl.innerText = 'Select a race to view leaderboard results.';
+                return;
+            }
+
+            statusEl.innerText = `Loading leaderboard for ${raceName}...`;
+
+            const { data, error } = await db
+                .from('leaderboard')
+                .select('position, player_name, events_hit, score')
+                .eq('race_name', raceName)
+                .order('position', { ascending: true })
+                .order('score', { ascending: false });
+
+            if (error) {
+                console.error('Could not load leaderboard:', error);
+                tableEl.style.display = 'none';
+                statusEl.innerText = `Leaderboard not available for ${raceName}.`;
+                return;
+            }
+
+            renderLeaderboard(data || [], raceName);
         }
     </script>
 </body>
