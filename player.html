@@ -63,6 +63,45 @@
         #leaderboard-loading { color: #d9dee7; margin-bottom: 10px; display: none; }
         #leaderboard-empty { color: #b6bdc8; font-size: 0.92rem; margin-top: 6px; display: none; }
 
+        #top-nav {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        #home-link {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--f1-red);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px; /* The rounded look */
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #home-link:hover {
+            background-color: #ff1e18; /* A slightly brighter red on hover */
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(225, 6, 0, 0.3);
+        }
+
+        #home-link:active {
+            transform: translateY(0);
+        }
+
+        /* Optional: styling the arrow specifically */
+        #home-link span {
+            margin-right: 8px;
+            font-size: 1.1rem;
+            line-height: 0;
+        }
+
         @media (max-width: 640px) {
             #board-actions { justify-content: flex-end; }
             #leaderboard-btn { width: auto; }
@@ -74,7 +113,9 @@
 <body>
 
     <div id="top-nav">
-        <a id="home-link" href="index.html">&larr; Back to Paddock (Home)</a>
+        <a id="home-link" href="index.html">
+            <span>&larr;</span> Back to Paddock
+        </a>
     </div>
     <h3 id="race-name">Race: Loading...</h3>
     <h2 id="status">Loading Board...</h2>
