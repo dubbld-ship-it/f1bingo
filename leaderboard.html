@@ -89,11 +89,54 @@
         }
 
         .meta { font-size: 0.85rem; color: #666; margin-top: 15px; text-align: center; }
+        #top-nav {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        #home-link {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--f1-red);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px; /* The rounded look */
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #home-link:hover {
+            background-color: #ff1e18; /* A slightly brighter red on hover */
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(225, 6, 0, 0.3);
+        }
+
+        #home-link:active {
+            transform: translateY(0);
+        }
+
+        /* Optional: styling the arrow specifically */
+        #home-link span {
+            margin-right: 8px;
+            font-size: 1.1rem;
+            line-height: 0;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <div id="top-nav">
+        <a id="home-link" href="index.html">
+            <span>&larr;</span> Back to Paddock
+        </a>
+    </div>
     <header>
         <h1>F1 BINGO <span style="color:var(--f1-red)">2026</span></h1>
         <p>Official Championship Standings</p>
