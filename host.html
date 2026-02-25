@@ -139,7 +139,8 @@
                         <th>Pos</th>
                         <th>Driver</th>
                         <th>Hits</th>
-                        <th>Bingos</th>
+                        <th>Bingos Hit</th>
+                        <th>Squares</th>
                         <th>Bonus</th>
                         <th>Total</th>
                     </tr>
@@ -618,6 +619,7 @@
                 const player = row.player_name || 'Unknown Driver';
                 const hits = row.events_hit || 0;
                 const bingos = row.bingo_count || 0;
+                const sqPts = row.square_pts || 0;
                 const bonus = row.bingo_bonus || 0;
                 const total = row.score || 0;
 
@@ -626,6 +628,7 @@
                     <td style="font-weight:bold;">${player}</td>
                     <td>${hits}</td>
                     <td style="color:#00d2ff;">${bingos}</td>
+                    <td>${sqPts}</td>
                     <td style="color:#ffc107;">+${bonus}</td>
                     <td style="font-weight:bold; color:var(--f1-red); text-align:right;">${total}</td>
                 `;
@@ -655,7 +658,7 @@
             // UPDATED SELECT STRING TO INCLUDE NEW COLUMNS
             const { data, error } = await db
                 .from('leaderboard')
-                .select('position, player_name, events_hit, bingo_count, bingo_bonus, score')
+                .select('position, player_name, events_hit, bingo_count, square_pts, bingo_bonus, score')
                 .eq('race_name', raceName)
                 .order('position', { ascending: true })
                 .order('score', { ascending: false });
