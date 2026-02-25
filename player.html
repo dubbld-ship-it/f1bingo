@@ -161,6 +161,7 @@
                                 <th>Races</th>
                                 <th>Wins</th>
                                 <th>Podiums</th>
+                                <th>Bingos</th>
                                 <th>Total Pts</th>
                             </tr>
                         </thead>
@@ -180,7 +181,10 @@
                                 <th>Pos</th>
                                 <th>Driver</th>
                                 <th>Events Hit</th>
-                                <th>Score</th>
+                                <th>Bingos</th>
+                                <th>Squares</th>
+                                <th>Bonus</th>
+                                <th>Total</th>
                             </tr>
                         </thead>
                         <tbody id="leaderboard-race-body"></tbody>
@@ -534,6 +538,7 @@
                         player_id: row.player_id,
                         player_name: row.player_name,
                         total_points: 0,
+                        total_bingos: 0,
                         races: 0,
                         wins: 0,
                         podiums: 0
@@ -542,6 +547,7 @@
 
                 const entry = totals.get(key);
                 entry.total_points += row.score;
+                entry.total_bingos += (row.bingo_count || 0);
                 entry.races += 1;
                 if (row.position === 1) entry.wins += 1;
                 if (row.position && row.position <= 3) entry.podiums += 1;
@@ -563,6 +569,7 @@
                     <td>${row.races}</td>
                     <td>${row.wins}</td>
                     <td>${row.podiums}</td>
+                    <td>${row.total_bingos}</td>
                     <td>${row.total_points}</td>
                 `;
                 tbody.appendChild(tr);
@@ -617,9 +624,12 @@
 
                 tr.innerHTML = `
                     <td>${row.position || (index + 1)}</td>
-                    <td>${row.player_name}</td>
+                    <td style="font-weight:bold;">${row.player_name}</td>
                     <td>${row.events_hit}</td>
-                    <td>${row.score}</td>
+                    <td style="color:#00d2ff;">${row.bingo_count || 0}</td>
+                    <td>${row.square_pts || 0}</td>
+                    <td style="color:#ffc107;">+${row.bingo_bonus || 0}</td>
+                    <td style="font-weight:bold; color:var(--f1-red);">${row.score}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -647,7 +657,7 @@
 
             const { data, error } = await db
                 .from('leaderboard')
-                .select('race_name, race_round, player_id, player_name, score, events_hit, position, recorded_at');
+                .select('race_name, race_round, player_id, player_name, score, events_hit, bingo_count, square_pts, bingo_bonus, position, recorded_at');
 
             setLeaderboardLoading(false);
 
@@ -670,6 +680,9 @@
                 player_name: row.player_name || 'Unknown Driver',
                 score: numericOrNull(row.score) ?? 0,
                 events_hit: numericOrNull(row.events_hit) ?? 0,
+                bingo_count: numericOrNull(row.bingo_count) ?? 0,
+                square_pts: numericOrNull(row.square_pts) ?? 0,
+                bingo_bonus: numericOrNull(row.bingo_bonus) ?? 0,
                 position: numericOrNull(row.position),
                 recorded_at: row.recorded_at || ''
             }));
