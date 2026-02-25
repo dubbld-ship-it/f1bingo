@@ -138,8 +138,10 @@
                     <tr>
                         <th>Pos</th>
                         <th>Driver</th>
-                        <th>Events Hit</th>
-                        <th>Score</th>
+                        <th>Hits</th>
+                        <th>Bingos</th>
+                        <th>Bonus</th>
+                        <th>Total</th>
                     </tr>
                 </thead>
                 <tbody id="leaderboard-body"></tbody>
@@ -450,43 +452,58 @@
         }
 
         function buildLeaderboardRows(raceName, raceRound, boards, liveRows) {
+            const happenedEvents = new Set();
             const pointsByEvent = new Map();
+
             (liveRows || []).forEach(row => {
                 if (!row?.event_text) return;
-                const parsed = Number(row.points);
-                const pts = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-                pointsByEvent.set(row.event_text, pts);
+                happenedEvents.add(row.event_text);
+                const pts = Number(row.points);
+                pointsByEvent.set(row.event_text, Number.isFinite(pts) && pts > 0 ? pts : 1);
             });
 
             const rows = (boards || []).map(board => {
                 const layout = Array.isArray(board.layout) ? board.layout : [];
-                let score = 0;
-                let eventsHit = 0;
+                let squarePoints = 0;
+                let hits = 0;
 
                 layout.forEach(eventText => {
                     if (eventText === 'FREE SPACE') return;
-                    if (!pointsByEvent.has(eventText)) return;
-
-                    score += pointsByEvent.get(eventText);
-                    eventsHit += 1;
+                    if (happenedEvents.has(eventText)) {
+                        squarePoints += pointsByEvent.get(eventText) || 1;
+                        hits += 1;
+                    }
                 });
+
+                const isHit = (idx) => (layout[idx] === 'FREE SPACE' || happenedEvents.has(layout[idx]));
+                let bingoCount = 0;
+
+                const lines = [
+                    [0,1,2,3,4], [5,6,7,8,9], [10,11,12,13,14], [15,16,17,18,19], [20,21,22,23,24], // Horizontals
+                    [0,5,10,15,20], [1,6,11,16,21], [2,7,12,17,22], [3,8,13,18,23], [4,9,14,19,24], // Verticals
+                    [0,6,12,18,24], [4,8,12,16,20] // Diagonals
+                ];
+
+                lines.forEach(line => {
+                    if (line.every(idx => isHit(idx))) bingoCount++;
+                });
+
+                const bonusPoints = bingoCount * 5;
 
                 return {
                     race_name: raceName,
                     race_round: raceRound,
                     player_id: String(board.id),
                     player_name: board.player_name || 'Unknown Driver',
-                    score,
-                    events_hit: eventsHit
+                    score: squarePoints + bonusPoints,
+                    events_hit: hits,
+                    bingo_count: bingoCount,    // The "amount" of bingos
+                    bingo_bonus: bonusPoints,
+                    square_pts: squarePoints
                 };
             });
 
-            rows.sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                if (b.events_hit !== a.events_hit) return b.events_hit - a.events_hit;
-                return a.player_name.localeCompare(b.player_name);
-            });
-
+            rows.sort((a, b) => b.score - a.score || b.events_hit - a.events_hit);
             return rows.map((row, idx) => ({ ...row, position: idx + 1 }));
         }
 
@@ -498,31 +515,58 @@
                 return;
             }
 
-            const ok = confirm(`End "${raceName}" and save leaderboard results for all drivers?`);
+            const ok = confirm(`OFFICIAL RACE CONTROL: End "${raceName}"?\n\nThis will snapshot all player boards, record happened events to history, and finalize the leaderboard.`);
             if (!ok) return;
 
             const endRaceBtn = document.getElementById('end-race-btn');
             endRaceBtn.disabled = true;
-            endRaceBtn.innerText = 'ENDING...';
+            endRaceBtn.innerText = 'PROCESSING...';
 
             try {
+                // 1. GATHER DATA (The "Evidence")
                 const { data: liveRows, error: liveErr } = await db
                     .from('live_race_state')
                     .select('event_text, points')
                     .eq('is_happened', true);
 
-                if (liveErr) {
-                    throw new Error(`Could not load race events: ${liveErr.message}`);
-                }
+                if (liveErr) throw new Error(`Could not load race events: ${liveErr.message}`);
 
                 const { data: boards, error: boardErr } = await db
                     .from('player_boards')
                     .select('id, player_name, layout');
 
-                if (boardErr) {
-                    throw new Error(`Could not load player boards: ${boardErr.message}`);
+                if (boardErr) throw new Error(`Could not load player boards: ${boardErr.message}`);
+
+                // 2. PREPARE HISTORY PAYLOADS
+                const eventHistoryEntries = (liveRows || []).map(row => ({
+                    race_name: raceName,
+                    event_text: row.event_text,
+                    points: row.points
+                }));
+
+                const boardHistoryEntries = (boards || []).map(board => ({
+                    race_name: raceName,
+                    player_id: String(board.id),
+                    player_name: board.player_name,
+                    layout: board.layout
+                }));
+
+                // 3. ARCHIVE TO HISTORY (Delete existing first to allow for "fixes/re-runs")
+                await db.from('race_event_history').delete().eq('race_name', raceName);
+                await db.from('player_boards_history').delete().eq('race_name', raceName);
+
+                if (eventHistoryEntries.length > 0) {
+                    const { error: eHistErr } = await db.from('race_event_history').insert(eventHistoryEntries);
+                    if (eHistErr) throw new Error(`Event history archival failed: ${eHistErr.message}`);
                 }
 
+                if (boardHistoryEntries.length > 0) {
+                    const { error: bHistErr } = await db.from('player_boards_history').insert(boardHistoryEntries);
+                    if (bHistErr) throw new Error(`Board history archival failed: ${bHistErr.message}`);
+                }
+
+                // 4. CALCULATE & SAVE LEADERBOARD
+                // Uses the buildLeaderboardRows function we updated with Bingo/Bonus logic
                 const leaderboardRows = buildLeaderboardRows(raceName, raceRound, boards || [], liveRows || []);
 
                 const { error: deleteErr } = await db
@@ -530,29 +574,20 @@
                     .delete()
                     .eq('race_name', raceName);
 
-                if (deleteErr) {
-                    throw new Error(`Could not clear previous leaderboard entries: ${deleteErr.message}`);
-                }
+                if (deleteErr) throw new Error(`Could not clear previous leaderboard: ${deleteErr.message}`);
 
                 if (leaderboardRows.length > 0) {
-                    const { error: insertErr } = await db
-                        .from('leaderboard')
-                        .insert(leaderboardRows);
-
-                    if (insertErr) {
-                        throw new Error(`Could not save leaderboard rows: ${insertErr.message}`);
-                    }
+                    const { error: insertErr } = await db.from('leaderboard').insert(leaderboardRows);
+                    if (insertErr) throw new Error(`Could not save leaderboard: ${insertErr.message}`);
                 }
 
+                // 5. REFRESH UI
                 await loadLeaderboard();
-                alert(`Race ended. Saved ${leaderboardRows.length} leaderboard result(s) for ${raceName}.`);
+                alert(`RACE CLOSED: ${raceName}\n\n- ${eventHistoryEntries.length} events archived\n- ${boardHistoryEntries.length} boards snapshotted\n- Leaderboard updated`);
+
             } catch (err) {
-                console.error('Failed to end race:', err);
-                const msg = err?.message || 'See console for details.';
-                const rlsHint = /row-level security policy/i.test(msg)
-                    ? '\n\nRLS fix: run leaderboard.sql in Supabase SQL Editor to create leaderboard policies.'
-                    : '';
-                alert(`Failed to end race. ${msg}\n\nExpected leaderboard columns: race_name, race_round, player_id, player_name, score, events_hit, position.${rlsHint}`);
+                console.error('Race Control Error:', err);
+                alert(`Failed to end race: ${err.message}`);
             } finally {
                 endRaceBtn.disabled = false;
                 endRaceBtn.innerText = 'END RACE';
@@ -563,29 +598,41 @@
             const statusEl = document.getElementById('leaderboard-status');
             const tableEl = document.getElementById('leaderboard-table');
             const tbody = document.getElementById('leaderboard-body');
+            
+            // 1. Always clear the old rows first
             tbody.innerHTML = '';
 
-            if (!rows.length) {
+            // 2. Handle empty state (Your original logic)
+            if (!rows || !rows.length) {
                 tableEl.style.display = 'none';
                 statusEl.innerText = `No leaderboard results saved yet for ${raceName}.`;
                 return;
             }
 
+            // 3. Build the new rows with the breakdown
             rows.forEach((row, index) => {
                 const tr = document.createElement('tr');
+                
+                // Fallbacks for data to prevent "undefined" appearing in UI
                 const pos = row.position || (index + 1);
-                const hitCount = row.events_hit || 0;
-                const score = row.score || 0;
+                const player = row.player_name || 'Unknown Driver';
+                const hits = row.events_hit || 0;
+                const bingos = row.bingo_count || 0;
+                const bonus = row.bingo_bonus || 0;
+                const total = row.score || 0;
 
                 tr.innerHTML = `
                     <td>${pos}</td>
-                    <td>${row.player_name || 'Unknown Driver'}</td>
-                    <td>${hitCount}</td>
-                    <td>${score}</td>
+                    <td style="font-weight:bold;">${player}</td>
+                    <td>${hits}</td>
+                    <td style="color:#00d2ff;">${bingos}</td>
+                    <td style="color:#ffc107;">+${bonus}</td>
+                    <td style="font-weight:bold; color:var(--f1-red); text-align:right;">${total}</td>
                 `;
                 tbody.appendChild(tr);
             });
 
+            // 4. Show the table and update the summary text
             statusEl.innerText = `${rows.length} driver result(s) recorded for ${raceName}.`;
             tableEl.style.display = 'table';
         }
@@ -605,9 +652,10 @@
 
             statusEl.innerText = `Loading leaderboard for ${raceName}...`;
 
+            // UPDATED SELECT STRING TO INCLUDE NEW COLUMNS
             const { data, error } = await db
                 .from('leaderboard')
-                .select('position, player_name, events_hit, score')
+                .select('position, player_name, events_hit, bingo_count, bingo_bonus, score')
                 .eq('race_name', raceName)
                 .order('position', { ascending: true })
                 .order('score', { ascending: false });
