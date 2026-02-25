@@ -78,7 +78,24 @@
     </div>
     <h3 id="race-name">Race: Loading...</h3>
     <h2 id="status">Loading Board...</h2>
-    
+    <div id="stats-dashboard" style="width: 100%; max-width: 500px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+    <div style="background: #1a1f27; padding: 10px; border-radius: 8px; border-left: 4px solid gold; text-align: center;">
+        <div style="font-size: 0.7rem; color: #b6bdc8; text-transform: uppercase;">Live Total</div>
+        <div id="stat-total-pts" style="font-size: 1.8rem; font-weight: bold; color: gold;">0</div>
+    </div>
+    <div style="background: #1a1f27; padding: 10px; border-radius: 8px; border-left: 4px solid var(--f1-red); text-align: center;">
+        <div style="font-size: 0.7rem; color: #b6bdc8; text-transform: uppercase;">Hits / Bingos</div>
+        <div style="font-size: 1.5rem; font-weight: bold;">
+            <span id="stat-hits" style="color: white;">0</span> 
+            <span style="color: #444; margin: 0 5px;">|</span> 
+            <span id="stat-bingos" style="color: var(--f1-red);">0</span>
+        </div>
+    </div>
+    <div colspan="2" style="grid-column: span 2; background: rgba(255,255,255,0.05); padding: 8px 15px; border-radius: 6px; font-size: 0.8rem; display: flex; justify-content: space-between;">
+        <span>Squares: <strong id="stat-sq-pts">0</strong> pts</span>
+        <span>Bingo Bonus: <strong id="stat-bonus-pts">0</strong> pts</span>
+    </div>
+</div>
     <div id="board-section">
         <div class="bingo-board" id="board"></div>
         <div id="board-actions">
@@ -293,33 +310,35 @@
         function renderBoard() {
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
-            let currentScore = 0;
             
+            // 1. Initialize counters
+            let squarePoints = 0;
+            let hitsCount = 0;
+            let bingoCount = 0;
+            let bonusPoints = 0;
+
             myBoardData.layout.forEach((text, index) => {
                 const cell = document.createElement('div');
                 cell.className = "cell";
                 
-                // Find the event in our pool to get its points
                 const eventData = fullEventPool.find(e => e.Event === text);
-                const pts = eventData ? (eventData.points || 1) : 0; // 0 for Free Space
+                const pts = eventData ? (eventData.points || 1) : 0; 
                 const color = rarityColors[pts] || "#ffffff";
 
                 if (text === "FREE SPACE") {
                     cell.classList.add('free-space');
                 } else {
-                    // Apply the rarity color to the text
                     cell.style.color = color;
-                    // Add a very subtle glow if it's a high-value square
                     if (pts >= 4) cell.style.textShadow = `0 0 5px ${color}66`;
                 }
 
+                // Logic for "Hit" squares
                 if (liveEvents.has(text)) {
                     cell.classList.add('live-happened');
-                    cell.style.color = color; // Contrast for the gold background
-                    currentScore += pts;
-                }
-                else {
-                    // RESET the color to rarity color if it's not live
+                    cell.style.color = color;
+                    squarePoints += pts; // Add base square value
+                    hitsCount++;        // Increment hit counter
+                } else {
                     cell.classList.remove('live-happened');
                     cell.style.color = (text === "FREE SPACE") ? "white" : color;
                 }
@@ -327,28 +346,42 @@
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
                 
                 cell.innerText = text;
-                // cell.onclick = () => isEditing ? openSwapModal(index) : toggleMark(index);
                 cell.onclick = () => {
-                    if (text === "FREE SPACE") return; // Absolute block
+                    if (text === "FREE SPACE") return;
                     isEditing ? openSwapModal(index) : toggleMark(index);
                 };
                 boardEl.appendChild(cell);
             });
 
-            // Update Score Display
-            const statusEl = document.getElementById('status');
-            if (!isEditing) {
-                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
-            }
+            // 2. Calculate Bingo Bonuses (+5 per line)
+            const completedLines = WINNING_LINES.filter(line => {
+                return line.every(index => {
+                    const cellText = myBoardData.layout[index];
+                    return cellText === "FREE SPACE" || liveEvents.has(cellText);
+                });
+            });
 
+            bingoCount = completedLines.length;
+            bonusPoints = bingoCount * 5;
+            const liveTotal = squarePoints + bonusPoints;
+
+            // 3. Update the UI Elements
+            document.getElementById('stat-total-pts').innerText = liveTotal;
+            document.getElementById('stat-hits').innerText = hitsCount;
+            document.getElementById('stat-bingos').innerText = bingoCount;
+            document.getElementById('stat-sq-pts').innerText = squarePoints;
+            document.getElementById('stat-bonus-pts').innerText = bonusPoints;
+
+            // Update Status Bar
+            const statusEl = document.getElementById('status');
             if (isEditing) {
-                statusEl.innerText = "Drafting Your Board... Current Potential: " + 
-                myBoardData.layout.reduce((acc, txt) => {
+                const potential = myBoardData.layout.reduce((acc, txt) => {
                     const d = fullEventPool.find(e => e.Event === txt);
                     return acc + (d ? (d.points || 1) : 0);
-                }, 0) + " pts";
+                }, 0);
+                statusEl.innerText = `Drafting Board... (Potential: ${potential} pts)`;
             } else {
-                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
+                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span>`;
             }
 
             checkWinCondition();
