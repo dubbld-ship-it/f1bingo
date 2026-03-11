@@ -332,14 +332,12 @@
             const select = document.getElementById('race-select');
             const roundInput = document.getElementById('race-round-input');
 
-            // 1. Fetch Race Names from F1 and Config from DB simultaneously
+            // 1. Parallel fetch: F1 Schedule + DB Config
             const [races, configRes] = await Promise.all([
                 fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR),
                 db.from('app_config')
-                .select('*')
-                // Specifically target only the rows we need
-                .or('key.eq.selected_race_name,config_key.eq.selected_race_round')
-                
+                .select('key, value')
+                .in('key', ['selected_race_name', 'selected_race_round'])
             ]);
 
             // 2. Populate Race Dropdown
@@ -351,19 +349,17 @@
                 select.appendChild(option);
             });
 
-            // 3. Extract Saved Values from Config Data
             const configData = configRes.data || [];
-            
-            // Find Race Name (key/value pattern)
-            const savedRaceRow = configData.find(r => r.key === 'selected_race_name');
-            const savedRace = savedRaceRow?.value || '';
 
-            // Find Round (config_key/config_value pattern)
-            const savedRoundRow = configData.find(r => r.config_key === 'selected_race_round');
-            const savedRound = savedRoundRow?.config_value || '1';
+            // 3. Extract Values (Mapping everything to the key/value schema)
+            const savedRaceRow = configData.find(r => r.key === 'selected_race_name');
+            const savedRoundRow = configData.find(r => r.key === 'selected_race_round');
+
+            const savedRace = savedRaceRow?.value || '';
+            const savedRound = savedRoundRow?.value || '1';
 
             // 4. Update UI Inputs
-            // Handle case where saved race isn't in the F1 list (e.g., custom name)
+            // Handle custom race names not in the official F1 list
             if (savedRace && !races.includes(savedRace)) {
                 const customOption = document.createElement('option');
                 customOption.value = savedRace;
@@ -376,6 +372,8 @@
             
             select.disabled = false;
             updateHostTitle(savedRace);
+
+            console.log(`Config Synced: ${savedRace} (Round ${savedRound})`);
         }
 
         async function saveSelectedRace() {
