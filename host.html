@@ -335,7 +335,11 @@
             // 1. Fetch Race Names from F1 and Config from DB simultaneously
             const [races, configRes] = await Promise.all([
                 fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR),
-                db.from('app_config').select('key, value, config_key, config_value')
+                db.from('app_config')
+                .select('*')
+                // Specifically target only the rows we need
+                .or('key.eq.selected_race_name,config_key.eq.selected_race_round')
+                
             ]);
 
             // 2. Populate Race Dropdown
