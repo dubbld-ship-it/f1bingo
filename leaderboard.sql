@@ -93,3 +93,14 @@ CREATE POLICY "Enable insert/delete for host" ON race_event_history FOR ALL USIN
 -- Policy for player_boards_history: Allow anyone to view, but only Host to Manage
 CREATE POLICY "Enable read access for all users" ON player_boards_history FOR SELECT USING (true);
 CREATE POLICY "Enable insert/delete for host" ON player_boards_history FOR ALL USING (true) WITH CHECK (true);
+
+-- Adding columns to keep history in playerboards history
+ALTER TABLE player_boards_history 
+ADD COLUMN IF NOT EXISTS score INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS bingo_count INTEGER DEFAULT 0,
+ADD COLUMN IF NOT EXISTS events_hit INTEGER DEFAULT 0,
+
+INSERT INTO app_config (key, value)
+VALUES ('selected_race_round', '1')
+ON CONFLICT (key) DO NOTHING;
+
