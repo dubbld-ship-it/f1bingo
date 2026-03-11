@@ -410,24 +410,24 @@
             const roundInput = document.getElementById('race-round-input');
             const newRound = roundInput.value;
 
-            // UI Feedback: Let the host know it's saving
             roundInput.style.opacity = "0.5";
             roundInput.disabled = true;
 
             try {
-                const { error } = await db
+                // .upsert() is better here—it handles both new and existing keys.
+                // We must include the 'key' in the object so Supabase knows what to match on.
+                const { data, error, count } = await db
                     .from('app_config')
-                    .update({ value: String(newRound) })
-                    .eq('key', 'selected_race_round');
+                    .upsert({ key: 'selected_race_round', value: String(newRound) }, { onConflict: 'key' })
+                    .select(); 
 
                 if (error) throw error;
                 
-                console.log(`Race Round updated to: ${newRound}`);
+                console.log(`Race Round sync successful. Value in DB is now: ${newRound}`);
             } catch (err) {
                 console.error("Failed to update race round:", err.message);
                 alert("System Error: Could not save the race round.");
             } finally {
-                // Restore UI
                 roundInput.style.opacity = "1";
                 roundInput.disabled = false;
             }
