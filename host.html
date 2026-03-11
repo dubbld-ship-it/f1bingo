@@ -439,13 +439,11 @@
         }
 
         function getSelectedRaceRound() {
-            const select = document.getElementById('race-select');
-            const raceName = getSelectedRaceName();
-            if (!select || !raceName) return null;
-
-            const options = Array.from(select.options).filter(opt => !!opt.value);
-            const idx = options.findIndex(opt => opt.value === raceName);
-            return idx >= 0 ? idx + 1 : null;
+            const roundInput = document.getElementById('race-round-input');
+            
+            // Simply return the value from the input field
+            // We use parseInt to ensure it's a number, defaulting to 1 if empty
+            return roundInput ? parseInt(roundInput.value, 10) || 1 : 1;
         }
 
         async function load() {

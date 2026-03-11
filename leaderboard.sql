@@ -104,3 +104,14 @@ INSERT INTO app_config (key, value)
 VALUES ('selected_race_round', '1')
 ON CONFLICT (key) DO NOTHING;
 
+CREATE POLICY "Allow public update for race settings only" 
+ON app_config FOR UPDATE 
+TO public 
+USING (key IN ('selected_race_name', 'selected_race_round'))
+WITH CHECK (key IN ('selected_race_name', 'selected_race_round'));
+
+ALTER TABLE race_event_history
+ADD COLUMN IF NOT EXISTS race_round INTEGER; 
+
+ALTER TABLE player_boards_history
+ADD COLUMN IF NOT EXISTS race_round INTEGER;
