@@ -217,6 +217,7 @@
     <div id="edit-modal" class="modal">
         <div class="modal-content">
             <h2 style="margin-top:0;">Edit Event</h2>
+            <input type="hidden" id="edit-event-id">
             <input type="hidden" id="edit-event-old-text">
             <input type="text" id="edit-event-text" placeholder="Event description">
             <select id="edit-event-points" style="width: 100%; padding: 12px; margin-bottom: 15px; background: #111; color: white; border: 1px solid #444;">
@@ -453,14 +454,21 @@
         }
 
         async function load() {
-            const { data: pool } = await db.from('f1_events_pool').select('*');
+            const { data: pool, error: poolErr } = await db.from('f1_events_pool').select('*');
             const { data: live } = await db.from('live_race_state').select('*');
+
+            if (poolErr) {
+                console.error("Fetch error:", poolErr);
+                return;
+            }
             const list = document.getElementById('list');
             list.innerHTML = "";
-
             pool.sort((a, b) => a.Event.localeCompare(b.Event));
 
             pool.forEach(ev => {
+                // debugging
+                console.log("Loading Event:", ev.Event, "with ID:", ev.id);
+
                 const active = live.find(l => l.event_text === ev.Event)?.is_happened;
                 const pts = ev.points || 1;
                 const badgeColor = rarityColors[pts] || "#ffffff";
@@ -484,21 +492,22 @@
 
                 
 
-                // 2. New Edit Button
+                // Action Buttons
+                // edit button
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn-edit';
                 editBtn.innerText = '✎';
                 editBtn.style.marginLeft = "8px";
                 editBtn.onclick = () => openEditModal(ev.id, ev.Event, pts);
 
-                // 3. New Delete Button
+                // delete button
                 const delBtn = document.createElement('button');
                 delBtn.className = 'btn-delete';
                 delBtn.innerText = '×';
                 delBtn.style.marginLeft = "8px";
                 delBtn.onclick = () => deleteEvent(ev.id, ev.Event);
 
-                // 1. Original MARK/HAPPENED Button
+                // MARK/HAPPENED Button
                 const btn = document.createElement('button');
                 btn.className = active ? 'btn-on' : 'btn-mark';
                 btn.innerText = active ? 'HAPPENED' : 'MARK';
@@ -520,6 +529,10 @@
 
         function openEditModal(id, text, points) {
             document.getElementById('edit-event-id').value = id; // Store the ID
+            if (!idInput) {
+                alert("CRITICAL ERROR: HTML element 'edit-event-id' is missing from the page.");
+                return;
+            }
             document.getElementById('edit-event-old-text').value = text;
             document.getElementById('edit-event-text').value = text;
             document.getElementById('edit-event-points').value = points;
