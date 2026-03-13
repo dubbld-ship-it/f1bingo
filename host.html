@@ -142,6 +142,15 @@
             font-size: 1.1rem;
             line-height: 0;
         }
+        /* New Action Buttons */
+        .event-actions { display: flex; gap: 8px; }
+        .btn-edit { background: #19629e; color: white; font-size: 0.8rem; }
+        .btn-delete { background: #d32f2f; color: white; font-size: 0.8rem; }
+        .btn-edit:hover { background: #1e73be; }
+        .btn-delete:hover { background: #f44336; }
+
+        /* Adjusting the event row for more buttons */
+        .event-row { gap: 10px; }
     </style>
 </head>
 <body>
@@ -186,24 +195,6 @@
             <input type="text" id="event-search" placeholder="Search events (e.g. 'Safety Car' or 'Max')..." onkeyup="filterEvents()">
         </div>
         <div id="list"></div>
-        <!--<div id="leaderboard-container">
-            <h2>Leaderboard</h2>
-            <div id="leaderboard-status">Select a race to view leaderboard results.</div>
-            <table id="leaderboard-table">
-                <thead>
-                    <tr>
-                        <th>Pos</th>
-                        <th>Driver</th>
-                        <th>Hits</th>
-                        <th>Bingos Hit</th>
-                        <th>Squares</th>
-                        <th>Bonus</th>
-                        <th>Total</th>
-                    </tr>
-                </thead>
-                <tbody id="leaderboard-body"></tbody>
-            </table>
-        </div>-->
     </div>
 
     <div id="add-modal" class="modal">
@@ -220,6 +211,24 @@
             <div class="modal-actions">
                 <button onclick="closeModal()" style="background:#555; color:white;">Cancel</button>
                 <button onclick="saveNewEvent()" style="background:var(--f1-red); color:white;">Add to Race</button>
+            </div>
+        </div>
+    </div>
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">Edit Event</h2>
+            <input type="hidden" id="edit-event-old-text">
+            <input type="text" id="edit-event-text" placeholder="Event description">
+            <select id="edit-event-points" style="width: 100%; padding: 12px; margin-bottom: 15px; background: #111; color: white; border: 1px solid #444;">
+                <option value="1" style="color: #ffffff;">1 Point (Common)</option>
+                <option value="2" style="color: #3c7a3e;">2 Points (Uncommon)</option>
+                <option value="3" style="color: #19629e;">3 Points (Rare)</option>
+                <option value="4" style="color: #9c27b0;">4 Points (Epic)</option>
+                <option value="5" style="color: #910C0C;">5 Points (CHAOS)</option>
+            </select>
+            <div class="modal-actions">
+                <button onclick="closeEditModal()" style="background:#555; color:white;">Cancel</button>
+                <button onclick="saveEditEvent()" style="background:var(--f1-red); color:white;">Update Event</button>
             </div>
         </div>
     </div>
@@ -271,7 +280,6 @@
                 document.getElementById('add-event-trigger').style.display = 'block';
                 await syncAppConfig();
                 await load();
-                // await loadLeaderboard();
             } else { alert("Denied."); }
         }
 
@@ -379,7 +387,6 @@
         async function saveSelectedRace() {
             const raceName = getSelectedRaceName();
             updateHostTitle(raceName);
-            // await loadLeaderboard();
             if (!raceName) return;
 
             const { data: updatedRows, error: updateErr } = await db
@@ -404,7 +411,6 @@
                 }
             }
 
-            // await loadLeaderboard();
         }
         async function saveSelectedRaceRound() {
             const roundInput = document.getElementById('race-round-input');
@@ -456,20 +462,18 @@
 
             pool.forEach(ev => {
                 const active = live.find(l => l.event_text === ev.Event)?.is_happened;
-
                 const pts = ev.points || 1;
                 const badgeColor = rarityColors[pts] || "#ffffff";
 
                 const div = document.createElement('div');
                 div.className = "event-row";
-
                 div.setAttribute('data-event', ev.Event.toLowerCase());
 
                 const span = document.createElement('span');
                 span.style.display = "flex";
                 span.style.justifyContent = "space-between";
                 span.style.alignItems = "center";
-                span.style.width = "70%";
+                span.style.width = "60%"; // Slightly reduced to make room for more buttons
 
                 span.innerHTML = `
                     <span>${ev.Event}</span>
@@ -478,20 +482,83 @@
                     </span>
                 `;
 
+                
+
+                // 2. New Edit Button
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-edit';
+                editBtn.innerText = '✎';
+                editBtn.style.marginLeft = "8px";
+                editBtn.onclick = () => openEditModal(ev.Event, pts);
+
+                // 3. New Delete Button
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-delete';
+                delBtn.innerText = '×';
+                delBtn.style.marginLeft = "8px";
+                delBtn.onclick = () => deleteEvent(ev.Event);
+
+                // 1. Original MARK/HAPPENED Button
                 const btn = document.createElement('button');
                 btn.className = active ? 'btn-on' : 'btn-mark';
                 btn.innerText = active ? 'HAPPENED' : 'MARK';
+                btn.style.marginLeft = "8px"; // Gap between Delete and Mark
+                btn.addEventListener('click', () => toggle(ev.Event, !!active, pts));
 
-                btn.addEventListener('click', () => {
-                    toggle(ev.Event, !!active, pts);
-                });
-
+                // Append everything in order
                 div.appendChild(span);
+                div.appendChild(editBtn);
+                div.appendChild(delBtn);
                 div.appendChild(btn);
                 list.appendChild(div);
             });
 
             filterEvents();
+        }
+
+        // --- NEW ACTION LOGIC ---
+
+        function openEditModal(text, points) {
+            document.getElementById('edit-event-old-text').value = text;
+            document.getElementById('edit-event-text').value = text;
+            document.getElementById('edit-event-points').value = points;
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').style.display = 'none';
+        }
+
+        async function saveEditEvent() {
+            const oldText = document.getElementById('edit-event-old-text').value;
+            const newText = document.getElementById('edit-event-text').value.trim();
+            const newPoints = parseInt(document.getElementById('edit-event-points').value);
+
+            if (!newText) return;
+
+            // Update both tables to keep history and current state consistent
+            const { error: err1 } = await db.from('f1_events_pool').update({ Event: newText, points: newPoints }).eq('Event', oldText);
+            const { error: err2 } = await db.from('live_race_state').update({ event_text: newText, points: newPoints }).eq('event_text', oldText);
+
+            if (!err1 && !err2) {
+                closeEditModal();
+                load();
+            } else {
+                alert("Update failed. Please check connection.");
+            }
+        }
+
+        async function deleteEvent(text) {
+            if (!confirm(`Are you sure you want to delete "${text}"? This will remove it from the pool and the current live race.`)) return;
+
+            const { error: err1 } = await db.from('f1_events_pool').delete().eq('Event', text);
+            const { error: err2 } = await db.from('live_race_state').delete().eq('event_text', text);
+
+            if (!err1 && !err2) {
+                load();
+            } else {
+                alert("Error deleting event.");
+            }
         }
 
         function filterEvents() {
@@ -686,7 +753,6 @@
                 }
 
                 // 6. REFRESH UI
-                // await loadLeaderboard();
                 alert(`RACE CLOSED: ${raceName} (Round ${raceRound})\n\nHistory archived and leaderboard updated.`);
 
             } catch (err) {
@@ -698,83 +764,6 @@
             }
         }
 
-        /*function renderLeaderboard(rows, raceName) {
-            const statusEl = document.getElementById('leaderboard-status');
-            const tableEl = document.getElementById('leaderboard-table');
-            const tbody = document.getElementById('leaderboard-body');
-            
-            // 1. Always clear the old rows first
-            tbody.innerHTML = '';
-
-            // 2. Handle empty state (Your original logic)
-            if (!rows || !rows.length) {
-                tableEl.style.display = 'none';
-                statusEl.innerText = `No leaderboard results saved yet for ${raceName}.`;
-                return;
-            }
-
-            // 3. Build the new rows with the breakdown
-            rows.forEach((row, index) => {
-                const tr = document.createElement('tr');
-                
-                // Fallbacks for data to prevent "undefined" appearing in UI
-                const pos = row.position || (index + 1);
-                const player = row.player_name || 'Unknown Driver';
-                const hits = row.events_hit || 0;
-                const bingos = row.bingo_count || 0;
-                const sqPts = row.square_pts || 0;
-                const bonus = row.bingo_bonus || 0;
-                const total = row.score || 0;
-
-                tr.innerHTML = `
-                    <td>${pos}</td>
-                    <td style="font-weight:bold;">${player}</td>
-                    <td>${hits}</td>
-                    <td style="color:#00d2ff;">${bingos}</td>
-                    <td>${sqPts}</td>
-                    <td style="color:#ffc107;">+${bonus}</td>
-                    <td style="font-weight:bold; color:var(--f1-red); text-align:right;">${total}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-            // 4. Show the table and update the summary text
-            statusEl.innerText = `${rows.length} driver result(s) recorded for ${raceName}.`;
-            tableEl.style.display = 'table';
-        }*/
-
-        /*async function loadLeaderboard() {
-            const raceName = getSelectedRaceName();
-            const statusEl = document.getElementById('leaderboard-status');
-            const tableEl = document.getElementById('leaderboard-table');
-            const tbody = document.getElementById('leaderboard-body');
-            tbody.innerHTML = '';
-
-            if (!raceName) {
-                tableEl.style.display = 'none';
-                statusEl.innerText = 'Select a race to view leaderboard results.';
-                return;
-            }
-
-            statusEl.innerText = `Loading leaderboard for ${raceName}...`;
-
-            // UPDATED SELECT STRING TO INCLUDE NEW COLUMNS
-            const { data, error } = await db
-                .from('leaderboard')
-                .select('position, player_name, events_hit, bingo_count, square_pts, bingo_bonus, score')
-                .eq('race_name', raceName)
-                .order('position', { ascending: true })
-                .order('score', { ascending: false });
-
-            if (error) {
-                console.error('Could not load leaderboard:', error);
-                tableEl.style.display = 'none';
-                statusEl.innerText = `Leaderboard not available for ${raceName}.`;
-                return;
-            }
-
-            renderLeaderboard(data || [], raceName);
-        }*/
     </script>
 </body>
 </html>
