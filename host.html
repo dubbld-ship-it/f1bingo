@@ -528,11 +528,12 @@
         // --- NEW ACTION LOGIC ---
 
         function openEditModal(id, text, points) {
-            document.getElementById('edit-event-id').value = id; // Store the ID
+            const idInput = document.getElementById('edit-event-id');
             if (!idInput) {
                 alert("CRITICAL ERROR: HTML element 'edit-event-id' is missing from the page.");
                 return;
             }
+            idInput.value = id;
             document.getElementById('edit-event-old-text').value = text;
             document.getElementById('edit-event-text').value = text;
             document.getElementById('edit-event-points').value = points;
