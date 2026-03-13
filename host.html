@@ -518,46 +518,53 @@
 
         // --- NEW ACTION LOGIC ---
 
-        function openEditModal(text, points) {
+        function openEditModal(id, text, points) {
+            document.getElementById('edit-event-id').value = id; // Store the ID
             document.getElementById('edit-event-old-text').value = text;
             document.getElementById('edit-event-text').value = text;
             document.getElementById('edit-event-points').value = points;
             document.getElementById('edit-modal').style.display = 'flex';
         }
 
-        function closeEditModal() {
-            document.getElementById('edit-modal').style.display = 'none';
-        }
-
         async function saveEditEvent() {
+            const id = document.getElementById('edit-event-id').value;
             const oldText = document.getElementById('edit-event-old-text').value;
             const newText = document.getElementById('edit-event-text').value.trim();
             const newPoints = parseInt(document.getElementById('edit-event-points').value);
 
-            if (!newText) return;
+            if (!newText || !id) return;
 
-            // Update both tables to keep history and current state consistent
-            const { error: err1 } = await db.from('f1_events_pool').update({ Event: newText, points: newPoints }).eq('Event', oldText);
-            const { error: err2 } = await db.from('live_race_state').update({ event_text: newText, points: newPoints }).eq('event_text', oldText);
+            // 1. Update the Pool by ID (Much safer!)
+            const { error: err1 } = await db.from('f1_events_pool')
+                .update({ Event: newText, points: newPoints })
+                .eq('id', id);
 
-            if (!err1 && !err2) {
+            // 2. Update the Live State by the old text (since it might not share the same ID)
+            const { error: err2 } = await db.from('live_race_state')
+                .update({ event_text: newText, points: newPoints })
+                .eq('event_text', oldText);
+
+            if (!err1) {
                 closeEditModal();
-                load();
+                await load();
             } else {
-                alert("Update failed. Please check connection.");
+                console.error(err1);
+                alert("Update failed. Check RLS or ID mapping.");
             }
         }
 
-        async function deleteEvent(text) {
-            if (!confirm(`Are you sure you want to delete "${text}"? This will remove it from the pool and the current live race.`)) return;
+        async function deleteEvent(id, text) {
+            if (!confirm(`Delete "${text}"?`)) return;
 
-            const { error: err1 } = await db.from('f1_events_pool').delete().eq('Event', text);
+            // Delete from pool by ID
+            const { error: err1 } = await db.from('f1_events_pool').delete().eq('id', id);
+            // Delete from live state by text
             const { error: err2 } = await db.from('live_race_state').delete().eq('event_text', text);
 
-            if (!err1 && !err2) {
-                load();
+            if (!err1) {
+                await load();
             } else {
-                alert("Error deleting event.");
+                alert("Delete failed.");
             }
         }
 
