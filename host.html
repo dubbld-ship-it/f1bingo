@@ -567,6 +567,16 @@
             }
         }
 
+        function closeEditModal() {
+            // Hide the modal
+            document.getElementById('edit-modal').style.display = 'none';
+            
+            // Clear the hidden inputs to prevent any data carry-over
+            document.getElementById('edit-event-id').value = "";
+            document.getElementById('edit-event-old-text').value = "";
+            document.getElementById('edit-event-text').value = "";
+        }
+        
         async function deleteEvent(id, text) {
             if (!confirm(`Delete "${text}"?`)) return;
 
