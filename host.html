@@ -104,10 +104,64 @@
         .modal-content { background: var(--f1-dark); padding: 30px; border: 2px solid var(--f1-red); border-radius: 8px; width: 90%; max-width: 400px; }
         .modal-content input { width: 100%; padding: 12px; margin: 15px 0; background: #111; color: white; border: 1px solid #444; box-sizing: border-box; }
         .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+        #top-nav {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        #home-link {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--f1-red);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px; /* The rounded look */
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #home-link:hover {
+            background-color: #ff1e18; /* A slightly brighter red on hover */
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(225, 6, 0, 0.3);
+        }
+
+        #home-link:active {
+            transform: translateY(0);
+        }
+
+        /* Optional: styling the arrow specifically */
+        #home-link span {
+            margin-right: 8px;
+            font-size: 1.1rem;
+            line-height: 0;
+        }
+        /* New Action Buttons */
+        .event-actions { display: flex; gap: 8px; }
+        .btn-edit { background: #19629e; color: white; font-size: 0.8rem; }
+        .btn-delete { background: #d32f2f; color: white; font-size: 0.8rem; }
+        .btn-edit:hover { background: #1e73be; }
+        .btn-delete:hover { background: #f44336; }
+
+        /* Adjusting the event row for more buttons */
+        .event-row { gap: 10px; }
     </style>
 </head>
 <body>
-
+    <div id="top-nav">
+        <a id="home-link" href="index.html">
+            <span>&larr;</span> Back to Paddock
+        </a>
+        <a id="home-link" href="leaderboard.html">
+            Leaderboard
+        </a>
+    </div>
     <div class="header-container">
         <h1 id="host-title">F1 Bingo 2026 - Race Control</h1>
         <button id="add-event-trigger" class="btn-add-main" style="display:none;" onclick="openModal()">+ ADD EVENT</button>
@@ -126,25 +180,21 @@
             </select>
             <button id="end-race-btn" onclick="endRace()">END RACE</button>
         </div>
+        <div class="control-group">
+            <label for="race-round-input">Official Race Round:</label>
+            <input 
+                type="number" 
+                id="race-round-input" 
+                value="1" 
+                min="1" 
+                onchange="saveSelectedRaceRound()"
+                style="width: 60px; padding: 5px; border-radius: 4px;"
+            >
+        </div>
         <div id="search-container">
             <input type="text" id="event-search" placeholder="Search events (e.g. 'Safety Car' or 'Max')..." onkeyup="filterEvents()">
         </div>
         <div id="list"></div>
-        <div id="leaderboard-container">
-            <h2>Leaderboard</h2>
-            <div id="leaderboard-status">Select a race to view leaderboard results.</div>
-            <table id="leaderboard-table">
-                <thead>
-                    <tr>
-                        <th>Pos</th>
-                        <th>Driver</th>
-                        <th>Events Hit</th>
-                        <th>Score</th>
-                    </tr>
-                </thead>
-                <tbody id="leaderboard-body"></tbody>
-            </table>
-        </div>
     </div>
 
     <div id="add-modal" class="modal">
@@ -161,6 +211,25 @@
             <div class="modal-actions">
                 <button onclick="closeModal()" style="background:#555; color:white;">Cancel</button>
                 <button onclick="saveNewEvent()" style="background:var(--f1-red); color:white;">Add to Race</button>
+            </div>
+        </div>
+    </div>
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-top:0;">Edit Event</h2>
+            <input type="hidden" id="edit-event-id">
+            <input type="hidden" id="edit-event-old-text">
+            <input type="text" id="edit-event-text" placeholder="Event description">
+            <select id="edit-event-points" style="width: 100%; padding: 12px; margin-bottom: 15px; background: #111; color: white; border: 1px solid #444;">
+                <option value="1" style="color: #ffffff;">1 Point (Common)</option>
+                <option value="2" style="color: #3c7a3e;">2 Points (Uncommon)</option>
+                <option value="3" style="color: #19629e;">3 Points (Rare)</option>
+                <option value="4" style="color: #9c27b0;">4 Points (Epic)</option>
+                <option value="5" style="color: #910C0C;">5 Points (CHAOS)</option>
+            </select>
+            <div class="modal-actions">
+                <button onclick="closeEditModal()" style="background:#555; color:white;">Cancel</button>
+                <button onclick="saveEditEvent()" style="background:var(--f1-red); color:white;">Update Event</button>
             </div>
         </div>
     </div>
@@ -210,9 +279,8 @@
                 document.getElementById('auth').style.display = 'none';
                 document.getElementById('controls').style.display = 'block';
                 document.getElementById('add-event-trigger').style.display = 'block';
-                await initRaceSelector();
+                await syncAppConfig();
                 await load();
-                await loadLeaderboard();
             } else { alert("Denied."); }
         }
 
@@ -269,10 +337,19 @@
             return FALLBACK_RACES_2026;
         }
 
-        async function initRaceSelector() {
+        async function syncAppConfig() {
             const select = document.getElementById('race-select');
-            const races = await fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR);
+            const roundInput = document.getElementById('race-round-input');
 
+            // 1. Parallel fetch: F1 Schedule + DB Config
+            const [races, configRes] = await Promise.all([
+                fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR),
+                db.from('app_config')
+                .select('key, value')
+                .in('key', ['selected_race_name', 'selected_race_round'])
+            ]);
+
+            // 2. Populate Race Dropdown
             select.innerHTML = '<option value="">Select race</option>';
             races.forEach(race => {
                 const option = document.createElement('option');
@@ -280,30 +357,37 @@
                 option.textContent = race;
                 select.appendChild(option);
             });
-            select.disabled = false;
 
-            const { data: selectedRaceRow } = await db
-                .from('app_config')
-                .select('value')
-                .eq('key', 'selected_race_name')
-                .maybeSingle();
+            const configData = configRes.data || [];
 
-            const selectedRace = selectedRaceRow?.value || '';
-            if (selectedRace && !races.includes(selectedRace)) {
+            // 3. Extract Values (Mapping everything to the key/value schema)
+            const savedRaceRow = configData.find(r => r.key === 'selected_race_name');
+            const savedRoundRow = configData.find(r => r.key === 'selected_race_round');
+
+            const savedRace = savedRaceRow?.value || '';
+            const savedRound = savedRoundRow?.value || '1';
+
+            // 4. Update UI Inputs
+            // Handle custom race names not in the official F1 list
+            if (savedRace && !races.includes(savedRace)) {
                 const customOption = document.createElement('option');
-                customOption.value = selectedRace;
-                customOption.textContent = selectedRace;
+                customOption.value = savedRace;
+                customOption.textContent = savedRace;
                 select.appendChild(customOption);
             }
 
-            select.value = selectedRace;
-            updateHostTitle(selectedRace);
+            select.value = savedRace;
+            roundInput.value = savedRound;
+            
+            select.disabled = false;
+            updateHostTitle(savedRace);
+
+            console.log(`Config Synced: ${savedRace} (Round ${savedRound})`);
         }
 
         async function saveSelectedRace() {
             const raceName = getSelectedRaceName();
             updateHostTitle(raceName);
-            await loadLeaderboard();
             if (!raceName) return;
 
             const { data: updatedRows, error: updateErr } = await db
@@ -328,7 +412,32 @@
                 }
             }
 
-            await loadLeaderboard();
+        }
+        async function saveSelectedRaceRound() {
+            const roundInput = document.getElementById('race-round-input');
+            const newRound = roundInput.value;
+
+            roundInput.style.opacity = "0.5";
+            roundInput.disabled = true;
+
+            try {
+                // .upsert() is better here—it handles both new and existing keys.
+                // We must include the 'key' in the object so Supabase knows what to match on.
+                const { data, error, count } = await db
+                    .from('app_config')
+                    .upsert({ key: 'selected_race_round', value: String(newRound) }, { onConflict: 'key' })
+                    .select(); 
+
+                if (error) throw error;
+                
+                console.log(`Race Round sync successful. Value in DB is now: ${newRound}`);
+            } catch (err) {
+                console.error("Failed to update race round:", err.message);
+                alert("System Error: Could not save the race round.");
+            } finally {
+                roundInput.style.opacity = "1";
+                roundInput.disabled = false;
+            }
         }
 
         function getSelectedRaceName() {
@@ -337,39 +446,42 @@
         }
 
         function getSelectedRaceRound() {
-            const select = document.getElementById('race-select');
-            const raceName = getSelectedRaceName();
-            if (!select || !raceName) return null;
-
-            const options = Array.from(select.options).filter(opt => !!opt.value);
-            const idx = options.findIndex(opt => opt.value === raceName);
-            return idx >= 0 ? idx + 1 : null;
+            const roundInput = document.getElementById('race-round-input');
+            
+            // Simply return the value from the input field
+            // We use parseInt to ensure it's a number, defaulting to 1 if empty
+            return roundInput ? parseInt(roundInput.value, 10) || 1 : 1;
         }
 
         async function load() {
-            const { data: pool } = await db.from('f1_events_pool').select('*');
+            const { data: pool, error: poolErr } = await db.from('f1_events_pool').select('*');
             const { data: live } = await db.from('live_race_state').select('*');
+
+            if (poolErr) {
+                console.error("Fetch error:", poolErr);
+                return;
+            }
             const list = document.getElementById('list');
             list.innerHTML = "";
-
             pool.sort((a, b) => a.Event.localeCompare(b.Event));
 
             pool.forEach(ev => {
-                const active = live.find(l => l.event_text === ev.Event)?.is_happened;
+                // debugging
+                console.log("Loading Event:", ev.Event, "with ID:", ev.id);
 
+                const active = live.find(l => l.event_text === ev.Event)?.is_happened;
                 const pts = ev.points || 1;
                 const badgeColor = rarityColors[pts] || "#ffffff";
 
                 const div = document.createElement('div');
                 div.className = "event-row";
-
                 div.setAttribute('data-event', ev.Event.toLowerCase());
 
                 const span = document.createElement('span');
                 span.style.display = "flex";
                 span.style.justifyContent = "space-between";
                 span.style.alignItems = "center";
-                span.style.width = "70%";
+                span.style.width = "60%"; // Slightly reduced to make room for more buttons
 
                 span.innerHTML = `
                     <span>${ev.Event}</span>
@@ -378,20 +490,106 @@
                     </span>
                 `;
 
+                
+
+                // Action Buttons
+                // edit button
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-edit';
+                editBtn.innerText = '✎';
+                editBtn.style.marginLeft = "8px";
+                editBtn.onclick = () => openEditModal(ev.id, ev.Event, pts);
+
+                // delete button
+                const delBtn = document.createElement('button');
+                delBtn.className = 'btn-delete';
+                delBtn.innerText = '×';
+                delBtn.style.marginLeft = "8px";
+                delBtn.onclick = () => deleteEvent(ev.id, ev.Event);
+
+                // MARK/HAPPENED Button
                 const btn = document.createElement('button');
                 btn.className = active ? 'btn-on' : 'btn-mark';
                 btn.innerText = active ? 'HAPPENED' : 'MARK';
+                btn.style.marginLeft = "8px"; // Gap between Delete and Mark
+                btn.addEventListener('click', () => toggle(ev.Event, !!active, pts));
 
-                btn.addEventListener('click', () => {
-                    toggle(ev.Event, !!active, pts);
-                });
-
+                // Append everything in order
                 div.appendChild(span);
+                div.appendChild(editBtn);
+                div.appendChild(delBtn);
                 div.appendChild(btn);
                 list.appendChild(div);
             });
 
             filterEvents();
+        }
+
+        // --- NEW ACTION LOGIC ---
+
+        function openEditModal(id, text, points) {
+            const idInput = document.getElementById('edit-event-id');
+            if (!idInput) {
+                alert("CRITICAL ERROR: HTML element 'edit-event-id' is missing from the page.");
+                return;
+            }
+            idInput.value = id;
+            document.getElementById('edit-event-old-text').value = text;
+            document.getElementById('edit-event-text').value = text;
+            document.getElementById('edit-event-points').value = points;
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        async function saveEditEvent() {
+            const id = document.getElementById('edit-event-id').value;
+            const oldText = document.getElementById('edit-event-old-text').value;
+            const newText = document.getElementById('edit-event-text').value.trim();
+            const newPoints = parseInt(document.getElementById('edit-event-points').value);
+
+            if (!newText || !id) return;
+
+            // 1. Update the Pool by ID (Much safer!)
+            const { error: err1 } = await db.from('f1_events_pool')
+                .update({ Event: newText, points: newPoints })
+                .eq('id', id);
+
+            // 2. Update the Live State by the old text (since it might not share the same ID)
+            const { error: err2 } = await db.from('live_race_state')
+                .update({ event_text: newText, points: newPoints })
+                .eq('event_text', oldText);
+
+            if (!err1) {
+                closeEditModal();
+                await load();
+            } else {
+                console.error(err1);
+                alert("Update failed. Check RLS or ID mapping.");
+            }
+        }
+
+        function closeEditModal() {
+            // Hide the modal
+            document.getElementById('edit-modal').style.display = 'none';
+            
+            // Clear the hidden inputs to prevent any data carry-over
+            document.getElementById('edit-event-id').value = "";
+            document.getElementById('edit-event-old-text').value = "";
+            document.getElementById('edit-event-text').value = "";
+        }
+        
+        async function deleteEvent(id, text) {
+            if (!confirm(`Delete "${text}"?`)) return;
+
+            // Delete from pool by ID
+            const { error: err1 } = await db.from('f1_events_pool').delete().eq('id', id);
+            // Delete from live state by text
+            const { error: err2 } = await db.from('live_race_state').delete().eq('event_text', text);
+
+            if (!err1) {
+                await load();
+            } else {
+                alert("Delete failed.");
+            }
         }
 
         function filterEvents() {
@@ -450,177 +648,153 @@
         }
 
         function buildLeaderboardRows(raceName, raceRound, boards, liveRows) {
+            const happenedEvents = new Set();
             const pointsByEvent = new Map();
+
             (liveRows || []).forEach(row => {
                 if (!row?.event_text) return;
-                const parsed = Number(row.points);
-                const pts = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
-                pointsByEvent.set(row.event_text, pts);
+                happenedEvents.add(row.event_text);
+                const pts = Number(row.points);
+                pointsByEvent.set(row.event_text, Number.isFinite(pts) && pts > 0 ? pts : 1);
             });
 
             const rows = (boards || []).map(board => {
                 const layout = Array.isArray(board.layout) ? board.layout : [];
-                let score = 0;
-                let eventsHit = 0;
+                let squarePoints = 0;
+                let hits = 0;
 
                 layout.forEach(eventText => {
                     if (eventText === 'FREE SPACE') return;
-                    if (!pointsByEvent.has(eventText)) return;
-
-                    score += pointsByEvent.get(eventText);
-                    eventsHit += 1;
+                    if (happenedEvents.has(eventText)) {
+                        squarePoints += pointsByEvent.get(eventText) || 1;
+                        hits += 1;
+                    }
                 });
+
+                const isHit = (idx) => (layout[idx] === 'FREE SPACE' || happenedEvents.has(layout[idx]));
+                let bingoCount = 0;
+
+                const lines = [
+                    [0,1,2,3,4], [5,6,7,8,9], [10,11,12,13,14], [15,16,17,18,19], [20,21,22,23,24], // Horizontals
+                    [0,5,10,15,20], [1,6,11,16,21], [2,7,12,17,22], [3,8,13,18,23], [4,9,14,19,24], // Verticals
+                    [0,6,12,18,24], [4,8,12,16,20] // Diagonals
+                ];
+
+                lines.forEach(line => {
+                    if (line.every(idx => isHit(idx))) bingoCount++;
+                });
+
+                const bonusPoints = bingoCount * 5;
 
                 return {
                     race_name: raceName,
                     race_round: raceRound,
                     player_id: String(board.id),
                     player_name: board.player_name || 'Unknown Driver',
-                    score,
-                    events_hit: eventsHit
+                    score: squarePoints + bonusPoints,
+                    events_hit: hits,
+                    bingo_count: bingoCount,    // The "amount" of bingos
+                    bingo_bonus: bonusPoints,
+                    square_pts: squarePoints
                 };
             });
 
-            rows.sort((a, b) => {
-                if (b.score !== a.score) return b.score - a.score;
-                if (b.events_hit !== a.events_hit) return b.events_hit - a.events_hit;
-                return a.player_name.localeCompare(b.player_name);
-            });
-
+            rows.sort((a, b) => b.score - a.score || b.events_hit - a.events_hit);
             return rows.map((row, idx) => ({ ...row, position: idx + 1 }));
         }
 
         async function endRace() {
             const raceName = getSelectedRaceName();
-            const raceRound = getSelectedRaceRound();
+            const raceRound = getSelectedRaceRound(); // Captured from your UI input/select
+            
             if (!raceName) {
                 alert('Select a race before ending it.');
                 return;
             }
 
-            const ok = confirm(`End "${raceName}" and save leaderboard results for all drivers?`);
+            const ok = confirm(`OFFICIAL RACE CONTROL: End "${raceName}" (Round ${raceRound || 'N/A'})?\n\nThis will snapshot all player boards and finalize the leaderboard.`);
             if (!ok) return;
 
             const endRaceBtn = document.getElementById('end-race-btn');
             endRaceBtn.disabled = true;
-            endRaceBtn.innerText = 'ENDING...';
+            endRaceBtn.innerText = 'PROCESSING...';
 
             try {
+                // 1. GATHER DATA
                 const { data: liveRows, error: liveErr } = await db
                     .from('live_race_state')
                     .select('event_text, points')
                     .eq('is_happened', true);
 
-                if (liveErr) {
-                    throw new Error(`Could not load race events: ${liveErr.message}`);
-                }
+                if (liveErr) throw new Error(`Could not load race events: ${liveErr.message}`);
 
                 const { data: boards, error: boardErr } = await db
                     .from('player_boards')
                     .select('id, player_name, layout');
 
-                if (boardErr) {
-                    throw new Error(`Could not load player boards: ${boardErr.message}`);
-                }
+                if (boardErr) throw new Error(`Could not load player boards: ${boardErr.message}`);
 
+                // 2. CALCULATE SCORES
+                // Passing raceRound here so buildLeaderboardRows can include it in the objects
                 const leaderboardRows = buildLeaderboardRows(raceName, raceRound, boards || [], liveRows || []);
 
-                const { error: deleteErr } = await db
-                    .from('leaderboard')
-                    .delete()
-                    .eq('race_name', raceName);
+                // 3. PREPARE HISTORY PAYLOADS
+                const eventHistoryEntries = (liveRows || []).map(row => ({
+                    race_name: raceName,
+                    race_round: raceRound, // Added for event history
+                    event_text: row.event_text,
+                    points: row.points
+                }));
 
-                if (deleteErr) {
-                    throw new Error(`Could not clear previous leaderboard entries: ${deleteErr.message}`);
+                const boardHistoryEntries = leaderboardRows.map(row => {
+                    const originalBoard = boards.find(b => String(b.id) === row.player_id);
+                    return {
+                        race_name: raceName,
+                        race_round: raceRound, // Added for board history
+                        player_id: row.player_id,
+                        player_name: row.player_name,
+                        layout: originalBoard ? originalBoard.layout : [],
+                        score: row.score,             
+                        bingo_count: row.bingo_count, 
+                        events_hit: row.events_hit    
+                    };
+                });
+
+                // 4. ARCHIVE TO HISTORY
+                // We delete by race_name so if you "re-run" a race, it overwrites the old snapshot
+                await db.from('race_event_history').delete().eq('race_name', raceName);
+                await db.from('player_boards_history').delete().eq('race_name', raceName);
+
+                if (eventHistoryEntries.length > 0) {
+                    const { error: eHistErr } = await db.from('race_event_history').insert(eventHistoryEntries);
+                    if (eHistErr) throw new Error(`Event history archival failed: ${eHistErr.message}`);
                 }
+
+                if (boardHistoryEntries.length > 0) {
+                    const { error: bHistErr } = await db.from('player_boards_history').insert(boardHistoryEntries);
+                    if (bHistErr) throw new Error(`Board history archival failed: ${bHistErr.message}`);
+                }
+
+                // 5. SAVE TO LEADERBOARD
+                await db.from('leaderboard').delete().eq('race_name', raceName);
 
                 if (leaderboardRows.length > 0) {
-                    const { error: insertErr } = await db
-                        .from('leaderboard')
-                        .insert(leaderboardRows);
-
-                    if (insertErr) {
-                        throw new Error(`Could not save leaderboard rows: ${insertErr.message}`);
-                    }
+                    const { error: insertErr } = await db.from('leaderboard').insert(leaderboardRows);
+                    if (insertErr) throw new Error(`Could not save leaderboard: ${insertErr.message}`);
                 }
 
-                await loadLeaderboard();
-                alert(`Race ended. Saved ${leaderboardRows.length} leaderboard result(s) for ${raceName}.`);
+                // 6. REFRESH UI
+                alert(`RACE CLOSED: ${raceName} (Round ${raceRound})\n\nHistory archived and leaderboard updated.`);
+
             } catch (err) {
-                console.error('Failed to end race:', err);
-                const msg = err?.message || 'See console for details.';
-                const rlsHint = /row-level security policy/i.test(msg)
-                    ? '\n\nRLS fix: run leaderboard.sql in Supabase SQL Editor to create leaderboard policies.'
-                    : '';
-                alert(`Failed to end race. ${msg}\n\nExpected leaderboard columns: race_name, race_round, player_id, player_name, score, events_hit, position.${rlsHint}`);
+                console.error('Race Control Error:', err);
+                alert(`Failed to end race: ${err.message}`);
             } finally {
                 endRaceBtn.disabled = false;
                 endRaceBtn.innerText = 'END RACE';
             }
         }
 
-        function renderLeaderboard(rows, raceName) {
-            const statusEl = document.getElementById('leaderboard-status');
-            const tableEl = document.getElementById('leaderboard-table');
-            const tbody = document.getElementById('leaderboard-body');
-            tbody.innerHTML = '';
-
-            if (!rows.length) {
-                tableEl.style.display = 'none';
-                statusEl.innerText = `No leaderboard results saved yet for ${raceName}.`;
-                return;
-            }
-
-            rows.forEach((row, index) => {
-                const tr = document.createElement('tr');
-                const pos = row.position || (index + 1);
-                const hitCount = row.events_hit || 0;
-                const score = row.score || 0;
-
-                tr.innerHTML = `
-                    <td>${pos}</td>
-                    <td>${row.player_name || 'Unknown Driver'}</td>
-                    <td>${hitCount}</td>
-                    <td>${score}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-            statusEl.innerText = `${rows.length} driver result(s) recorded for ${raceName}.`;
-            tableEl.style.display = 'table';
-        }
-
-        async function loadLeaderboard() {
-            const raceName = getSelectedRaceName();
-            const statusEl = document.getElementById('leaderboard-status');
-            const tableEl = document.getElementById('leaderboard-table');
-            const tbody = document.getElementById('leaderboard-body');
-            tbody.innerHTML = '';
-
-            if (!raceName) {
-                tableEl.style.display = 'none';
-                statusEl.innerText = 'Select a race to view leaderboard results.';
-                return;
-            }
-
-            statusEl.innerText = `Loading leaderboard for ${raceName}...`;
-
-            const { data, error } = await db
-                .from('leaderboard')
-                .select('position, player_name, events_hit, score')
-                .eq('race_name', raceName)
-                .order('position', { ascending: true })
-                .order('score', { ascending: false });
-
-            if (error) {
-                console.error('Could not load leaderboard:', error);
-                tableEl.style.display = 'none';
-                statusEl.innerText = `Leaderboard not available for ${raceName}.`;
-                return;
-            }
-
-            renderLeaderboard(data || [], raceName);
-        }
     </script>
 </body>
 </html>
