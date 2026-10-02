@@ -5,22 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Host - F1 Race Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="calendar-2026.js"></script>
     <style>
         :root { --f1-red: #e10600; --f1-dark: #1f1f27; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #111; color: white; padding: 20px; }
-        
+
         .header-container { position: relative; border-bottom: 2px solid var(--f1-red); margin-bottom: 10px; padding-bottom: 10px; }
-        
-        .btn-add-main { 
-            position: absolute; right: 0; top: 10px; 
-            background: var(--f1-red); color: white; border: none; 
-            padding: 10px 20px; font-weight: bold; border-radius: 4px; 
+
+        .btn-add-main {
+            position: absolute; right: 0; top: 10px;
+            background: var(--f1-red); color: white; border: none;
+            padding: 10px 20px; font-weight: bold; border-radius: 4px;
         }
 
         /* Search Bar Styling */
         #search-container { margin-bottom: 20px; }
-        #event-search { 
-            width: 100%; padding: 12px; background: #222; color: white; 
+        #event-search {
+            width: 100%; padding: 12px; background: #222; color: white;
             border: 1px solid #444; border-radius: 4px; box-sizing: border-box;
             font-size: 1rem;
         }
@@ -95,9 +96,9 @@
         #leaderboard-table th:last-child {
             text-align: right;
         }
-        
+
         button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; }
-        .btn-on { background: #ffc107; color: black; } 
+        .btn-on { background: #ffc107; color: black; }
         .btn-mark { background: #444; color: white; }
 
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center; }
@@ -182,12 +183,13 @@
         </div>
         <div class="control-group">
             <label for="race-round-input">Official Race Round:</label>
-            <input 
-                type="number" 
-                id="race-round-input" 
-                value="1" 
-                min="1" 
-                onchange="saveSelectedRaceRound()"
+            <input
+                type="number"
+                id="race-round-input"
+                value="1"
+                min="1"
+                readonly
+                aria-readonly="true"
                 style="width: 60px; padding: 5px; border-radius: 4px;"
             >
         </div>
@@ -236,33 +238,7 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
-        const CHAMPIONSHIP_YEAR = 2026;
-        const FALLBACK_RACES_2026 = [
-            'Australian Grand Prix',
-            'Chinese Grand Prix',
-            'Japanese Grand Prix',
-            'Bahrain Grand Prix',
-            'Saudi Arabian Grand Prix',
-            'Miami Grand Prix',
-            'Canadian Grand Prix',
-            'Monaco Grand Prix',
-            'Barcelona-Catalunya Grand Prix',
-            'Austrian Grand Prix',
-            'British Grand Prix',
-            'Belgian Grand Prix',
-            'Hungarian Grand Prix',
-            'Dutch Grand Prix',
-            'Italian Grand Prix',
-            'Spanish Grand Prix',
-            'Azerbaijan Grand Prix',
-            'Singapore Grand Prix',
-            'United States Grand Prix',
-            'Mexico City Grand Prix',
-            'Sao Paulo Grand Prix',
-            'Las Vegas Grand Prix',
-            'Qatar Grand Prix',
-            'Abu Dhabi Grand Prix'
-        ];
+        const { CHAMPIONSHIP_YEAR, races: RACES_2026, resolveRace } = F1Calendar2026;
 
         const rarityColors = {
             1: "#ffffff", // Common (White)
@@ -293,164 +269,108 @@
             title.innerText = `${raceName} - Race Control`;
         }
 
-        function extractRaceNamesFromCalendar(calendarText, year) {
-            const raceNames = [];
-            const seen = new Set();
-            const linePattern = new RegExp(`FORMULA 1\\s+(.+?)\\s+${year}`, 'i');
-
-            calendarText.split('\n').forEach(line => {
-                if (!line.includes('FORMULA 1') || !line.includes(String(year))) return;
-                const match = line.match(linePattern);
-                if (!match) return;
-
-                const candidate = match[1].replace(/\s+/g, ' ').trim();
-                const isRaceName = /(GRAND PRIX|GRAN PREMIO|GRANDE PR)/i.test(candidate);
-                const isTesting = /TESTING/i.test(candidate);
-                if (!isRaceName || isTesting) return;
-                if (seen.has(candidate)) return;
-
-                seen.add(candidate);
-                raceNames.push(candidate);
-            });
-
-            return raceNames;
-        }
-
-        async function fetchRaceNamesFromF1(year) {
-            const sources = [
-                `https://r.jina.ai/http://www.formula1.com/en/racing/${year}`,
-                `https://r.jina.ai/http://www.formula1.com/en/racing/${year}.html`
-            ];
-
-            for (const source of sources) {
-                try {
-                    const res = await fetch(source, { cache: 'no-store' });
-                    if (!res.ok) continue;
-                    const text = await res.text();
-                    const races = extractRaceNamesFromCalendar(text, year);
-                    if (races.length >= 20) return races;
-                } catch (err) {
-                    console.warn(`Could not fetch race list from ${source}`, err);
-                }
-            }
-
-            return FALLBACK_RACES_2026;
-        }
-
         async function syncAppConfig() {
             const select = document.getElementById('race-select');
             const roundInput = document.getElementById('race-round-input');
 
-            // 1. Parallel fetch: F1 Schedule + DB Config
-            const [races, configRes] = await Promise.all([
-                fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR),
-                db.from('app_config')
-                .select('key, value')
-                .in('key', ['selected_race_name', 'selected_race_round'])
-            ]);
-
-            // 2. Populate Race Dropdown
             select.innerHTML = '<option value="">Select race</option>';
-            races.forEach(race => {
+            RACES_2026.forEach(race => {
                 const option = document.createElement('option');
-                option.value = race;
-                option.textContent = race;
+                option.value = race.id;
+                option.dataset.round = String(race.round);
+                option.dataset.raceName = race.name;
+                option.textContent = `Round ${race.round}: ${race.name}`;
                 select.appendChild(option);
             });
 
-            const configData = configRes.data || [];
+            const { data: selectedRaceRows, error } = await db
+                .from('app_config')
+                .select('key, value')
+                .in('key', ['selected_race_id', 'selected_race_name', 'selected_race_round']);
 
-            // 3. Extract Values (Mapping everything to the key/value schema)
-            const savedRaceRow = configData.find(r => r.key === 'selected_race_name');
-            const savedRoundRow = configData.find(r => r.key === 'selected_race_round');
-
-            const savedRace = savedRaceRow?.value || '';
-            const savedRound = savedRoundRow?.value || '1';
-
-            // 4. Update UI Inputs
-            // Handle custom race names not in the official F1 list
-            if (savedRace && !races.includes(savedRace)) {
-                const customOption = document.createElement('option');
-                customOption.value = savedRace;
-                customOption.textContent = savedRace;
-                select.appendChild(customOption);
+            if (error) {
+                console.error('Could not load selected race.', error);
             }
 
-            select.value = savedRace;
-            roundInput.value = savedRound;
-            
-            select.disabled = false;
-            updateHostTitle(savedRace);
+            const config = new Map((selectedRaceRows || []).map(row => [row.key, row.value]));
+            const selectedRace = resolveRace(config.get('selected_race_id'))
+                || resolveRace(config.get('selected_race_name'));
 
-            console.log(`Config Synced: ${savedRace} (Round ${savedRound})`);
+            select.value = selectedRace?.id || '';
+            roundInput.value = selectedRace?.round || '';
+            select.disabled = false;
+            updateHostTitle(selectedRace?.name || '');
+
+            const needsMigration = selectedRace && (
+                config.get('selected_race_id') !== selectedRace.id
+                || config.get('selected_race_name') !== selectedRace.name
+                || Number(config.get('selected_race_round')) !== selectedRace.round
+            );
+            if (needsMigration) {
+                await persistSelectedRace(selectedRace, true);
+            }
+
+            console.log(`Config synced: ${selectedRace?.name || 'No race selected'} (Round ${selectedRace?.round || 'N/A'})`);
         }
 
         async function saveSelectedRace() {
-            const raceName = getSelectedRaceName();
-            updateHostTitle(raceName);
-            if (!raceName) return;
+            const race = getSelectedRace();
+            const roundInput = document.getElementById('race-round-input');
+            updateHostTitle(race?.name || '');
+            roundInput.value = race?.round || '';
+            if (!race) return;
 
+            await persistSelectedRace(race, false);
+        }
+
+        async function saveConfigValue(key, value) {
             const { data: updatedRows, error: updateErr } = await db
                 .from('app_config')
-                .update({ value: raceName })
-                .eq('key', 'selected_race_name')
+                .update({ value })
+                .eq('key', key)
                 .select('key');
 
             if (updateErr) {
-                console.error('Failed to save race selection.', updateErr);
-                alert('Could not save selected race.');
-                return;
+                return updateErr;
             }
 
             if (!updatedRows || updatedRows.length === 0) {
                 const { error: insertErr } = await db
                     .from('app_config')
-                    .insert([{ key: 'selected_race_name', value: raceName }]);
-                if (insertErr) {
-                    console.error('Failed to insert race selection.', insertErr);
-                    alert('Could not save selected race.');
-                }
+                    .insert([{ key, value }]);
+                if (insertErr) return insertErr;
             }
 
+            return null;
         }
-        async function saveSelectedRaceRound() {
-            const roundInput = document.getElementById('race-round-input');
-            const newRound = roundInput.value;
 
-            roundInput.style.opacity = "0.5";
-            roundInput.disabled = true;
+        async function persistSelectedRace(race, silent) {
+            const errors = (await Promise.all([
+                saveConfigValue('selected_race_id', race.id),
+                saveConfigValue('selected_race_name', race.name),
+                saveConfigValue('selected_race_round', String(race.round))
+            ])).filter(Boolean);
 
-            try {
-                // .upsert() is better here—it handles both new and existing keys.
-                // We must include the 'key' in the object so Supabase knows what to match on.
-                const { data, error, count } = await db
-                    .from('app_config')
-                    .upsert({ key: 'selected_race_round', value: String(newRound) }, { onConflict: 'key' })
-                    .select(); 
-
-                if (error) throw error;
-                
-                console.log(`Race Round sync successful. Value in DB is now: ${newRound}`);
-            } catch (err) {
-                console.error("Failed to update race round:", err.message);
-                alert("System Error: Could not save the race round.");
-            } finally {
-                roundInput.style.opacity = "1";
-                roundInput.disabled = false;
+            if (errors.length) {
+                console.error('Failed to save race selection.', errors);
+                if (!silent) alert('Could not save selected race.');
+                return errors[0];
             }
+
+            return null;
+        }
+
+        function getSelectedRace() {
+            const select = document.getElementById('race-select');
+            return resolveRace(select?.value);
         }
 
         function getSelectedRaceName() {
-            const select = document.getElementById('race-select');
-            return (select?.value || '').trim();
+            return getSelectedRace()?.name || '';
         }
 
         function getSelectedRaceRound() {
-            const roundInput = document.getElementById('race-round-input');
-            
-            // Simply return the value from the input field
-            // We use parseInt to ensure it's a number, defaulting to 1 if empty
-            return roundInput ? parseInt(roundInput.value, 10) || 1 : 1;
+            return getSelectedRace()?.round || null;
         }
 
         async function load() {
@@ -490,7 +410,7 @@
                     </span>
                 `;
 
-                
+
 
                 // Action Buttons
                 // edit button
@@ -570,13 +490,13 @@
         function closeEditModal() {
             // Hide the modal
             document.getElementById('edit-modal').style.display = 'none';
-            
+
             // Clear the hidden inputs to prevent any data carry-over
             document.getElementById('edit-event-id').value = "";
             document.getElementById('edit-event-old-text').value = "";
             document.getElementById('edit-event-text').value = "";
         }
-        
+
         async function deleteEvent(id, text) {
             if (!confirm(`Delete "${text}"?`)) return;
 
@@ -706,7 +626,7 @@
         async function endRace() {
             const raceName = getSelectedRaceName();
             const raceRound = getSelectedRaceRound(); // Captured from your UI input/select
-            
+
             if (!raceName) {
                 alert('Select a race before ending it.');
                 return;
@@ -754,9 +674,9 @@
                         player_id: row.player_id,
                         player_name: row.player_name,
                         layout: originalBoard ? originalBoard.layout : [],
-                        score: row.score,             
-                        bingo_count: row.bingo_count, 
-                        events_hit: row.events_hit    
+                        score: row.score,
+                        bingo_count: row.bingo_count,
+                        events_hit: row.events_hit
                     };
                 });
 

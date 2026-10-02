@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Player - F1 Bingo</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="calendar-2026.js"></script>
     <style>
         :root { --f1-red: #E10600; --f1-dark: #15151E; --f1-grey: #333; }
         body { font-family: Arial, sans-serif; background: var(--f1-dark); color: white; padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -14,11 +15,11 @@
         #board-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
         #leaderboard-btn { background: #263238; border: 1px solid #4f5b62; padding: 10px 14px; font-size: 0.85rem; }
         #leaderboard-btn:hover { background: #344047; }
-        
+
         /* Board Styles */
         .bingo-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: var(--f1-red); padding: 8px; border-radius: 8px; width: 100%; max-width: 500px; }
         .cell { background: var(--f1-grey); aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 5px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; font-weight: bold; box-sizing: border-box; overflow: hidden; }
-        
+
         /* State Styles */
         .cell.marked { opacity: 0.4; } /* User's personal click */
         .cell.live-happened { background: gold !important; color: black; box-shadow: 0 0 15px gold; border: 2px solid white; }
@@ -27,7 +28,7 @@
         /* Controls & Modals */
         #setup-controls { margin: 20px; text-align: center; }
         button { padding: 10px 20px; border: none; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; }
-        
+
         .modal { display: none; position: fixed; z-index: 1000; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
         .modal-content { background: var(--f1-dark); padding: 30px; border: 2px solid var(--f1-red); border-radius: 8px; width: 90%; max-width: 400px; text-align: center; }
         select { width: 100%; padding: 10px; margin: 15px 0; background: #222; color: white; }
@@ -130,8 +131,8 @@
     <div style="background: #1a1f27; padding: 10px; border-radius: 8px; border-left: 4px solid var(--f1-red); text-align: center;">
         <div style="font-size: 0.7rem; color: #b6bdc8; text-transform: uppercase;">Hits / Bingos</div>
         <div style="font-size: 1.5rem; font-weight: bold;">
-            <span id="stat-hits" style="color: white;">0</span> 
-            <span style="color: #444; margin: 0 5px;">|</span> 
+            <span id="stat-hits" style="color: white;">0</span>
+            <span style="color: #444; margin: 0 5px;">|</span>
             <span id="stat-bingos" style="color: var(--f1-red);">0</span>
         </div>
     </div>
@@ -149,14 +150,14 @@
 
     <div id="setup-controls" style="display:none; margin: 20px; padding: 15px; border: 1px dashed #555; border-radius: 8px; background: rgba(255,255,255,0.05);">
         <p style="margin-top: 0;"><strong>Drafting Mode:</strong> Double-click a cell to swap it.</p>
-        
+
         <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center;">
             <button onclick="finalizeBoard()" style="background: #28a745; font-size: 1.1rem; padding: 12px 24px;">Lock-in & Register Board</button>
-            
+
             <div style="max-width: 300px; text-align: left; font-size: 0.85rem; color: #bbb; line-height: 1.4;">
-                <span style="color: #ffc107; font-weight: bold;">⚠️ Warning:</span> 
-                Once locked in, you can no longer edit these squares. 
-                Remember the name you've given to refer back to this later. 
+                <span style="color: #ffc107; font-weight: bold;">⚠️ Warning:</span>
+                Once locked in, you can no longer edit these squares.
+                Remember the name you've given to refer back to this later.
                 There is no editing allowed after registering. The host/Race Control will mark off events live and it will be reflected on this card accordingly.
             </div>
         </div>
@@ -240,7 +241,8 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
-   
+        const resolveCalendarRace = F1Calendar2026.resolveRace;
+
         const rarityColors = {
             1: "#ffffff", // Common
             2: "#3c7a3e", // Uncommon
@@ -251,7 +253,7 @@
 
         let liveEvents = new Set();
         let myBoardData = {
-            id: localStorage.getItem('f1_bingo_id'), 
+            id: localStorage.getItem('f1_bingo_id'),
             playerName: '',
             layout: [],
             marks: []
@@ -279,9 +281,8 @@
         async function loadSelectedRaceName() {
             const { data, error } = await db
                 .from('app_config')
-                .select('value')
-                .eq('key', 'selected_race_name')
-                .maybeSingle();
+                .select('key, value')
+                .in('key', ['selected_race_id', 'selected_race_name']);
 
             if (error) {
                 console.error('Could not load selected race name:', error);
@@ -289,7 +290,10 @@
                 return;
             }
 
-            updateRaceNameDisplay(data?.value || '');
+            const config = new Map((data || []).map(row => [row.key, row.value]));
+            const selectedRace = resolveCalendarRace(config.get('selected_race_id'))
+                || resolveCalendarRace(config.get('selected_race_name'));
+            updateRaceNameDisplay(selectedRace?.name || config.get('selected_race_name') || '');
         }
 
         async function init() {
@@ -302,13 +306,13 @@
             // 2. Get initial "Happened" state
             const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
             live?.forEach(l => liveEvents.add(l.event_text));
-            
+
             setupListener();
 
             if (myBoardData.id && myBoardData.id !== "null") {
                 loadExistingBoard();
             } else {
-                showSetupScreen(); 
+                showSetupScreen();
             }
         }
 
@@ -335,7 +339,7 @@
             // Fetch pool (ensure 'points' is lowercase to match your DB)
             const { data: pool } = await db.from('f1_events_pool').select('Event, points');
             if (!pool) { alert("Error connecting to Race Control."); return; }
-            
+
             fullEventPool = pool;
 
             // Shuffle and pick 24
@@ -343,7 +347,7 @@
 
             // Convert objects to just the Event strings FIRST
             let layoutStrings = shuffled.map(x => x.Event);
-            
+
             // NOW insert the Free Space string at index 12 (the dead center)
             layoutStrings.splice(12, 0, "FREE SPACE");
 
@@ -358,7 +362,7 @@
         function renderBoard() {
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
-            
+
             // 1. Initialize counters
             let squarePoints = 0;
             let hitsCount = 0;
@@ -368,9 +372,9 @@
             myBoardData.layout.forEach((text, index) => {
                 const cell = document.createElement('div');
                 cell.className = "cell";
-                
+
                 const eventData = fullEventPool.find(e => e.Event === text);
-                const pts = eventData ? (eventData.points || 1) : 0; 
+                const pts = eventData ? (eventData.points || 1) : 0;
                 const color = rarityColors[pts] || "#ffffff";
 
                 if (text === "FREE SPACE") {
@@ -390,9 +394,9 @@
                     cell.classList.remove('live-happened');
                     cell.style.color = (text === "FREE SPACE") ? "white" : color;
                 }
-                
+
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
-                
+
                 cell.innerText = text;
                 cell.onclick = () => {
                     if (text === "FREE SPACE") return;
@@ -473,7 +477,7 @@
             selectedCellIndex = index;
             const picker = document.getElementById('event-picker');
             picker.innerHTML = "";
-            
+
             fullEventPool.forEach(ev => {
                 if (!myBoardData.layout.includes(ev.Event)) {
                     let opt = document.createElement('option');
@@ -802,8 +806,15 @@
                 })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, (payload) => {
                     const key = payload?.new?.key || payload?.old?.key;
-                    if (key !== 'selected_race_name') return;
-                    updateRaceNameDisplay(payload?.new?.value || '');
+                    if (key !== 'selected_race_id' && key !== 'selected_race_name') return;
+
+                    const value = payload?.new?.value || '';
+                    const selectedRace = resolveCalendarRace(value);
+                    if (selectedRace) {
+                        updateRaceNameDisplay(selectedRace.name);
+                    } else if (key === 'selected_race_name') {
+                        updateRaceNameDisplay(value);
+                    }
                 }).subscribe();
         }
 
