@@ -15,11 +15,11 @@
         #board-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
         #leaderboard-btn { background: #263238; border: 1px solid #4f5b62; padding: 10px 14px; font-size: 0.85rem; }
         #leaderboard-btn:hover { background: #344047; }
-        
+
         /* Board Styles */
         .bingo-board { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; background: var(--f1-red); padding: 8px; border-radius: 8px; width: 100%; max-width: 500px; }
         .cell { background: var(--f1-grey); aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 5px; font-size: 0.75rem; border-radius: 4px; cursor: pointer; font-weight: bold; box-sizing: border-box; overflow: hidden; }
-        
+
         /* State Styles */
         .cell.marked { opacity: 0.4; } /* User's personal click */
         .cell.live-happened { background: gold !important; color: black; box-shadow: 0 0 15px gold; border: 2px solid white; }
@@ -28,7 +28,7 @@
         /* Controls & Modals */
         #setup-controls { margin: 20px; text-align: center; }
         button { padding: 10px 20px; border: none; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; }
-        
+
         .modal { display: none; position: fixed; z-index: 1000; inset: 0; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; }
         .modal-content { background: var(--f1-dark); padding: 30px; border: 2px solid var(--f1-red); border-radius: 8px; width: 90%; max-width: 400px; text-align: center; }
         select { width: 100%; padding: 10px; margin: 15px 0; background: #222; color: white; }
@@ -64,6 +64,45 @@
         #leaderboard-loading { color: #d9dee7; margin-bottom: 10px; display: none; }
         #leaderboard-empty { color: #b6bdc8; font-size: 0.92rem; margin-top: 6px; display: none; }
 
+        #top-nav {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        #home-link {
+            display: inline-flex;
+            align-items: center;
+            background-color: var(--f1-red);
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px; /* The rounded look */
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        #home-link:hover {
+            background-color: #ff1e18; /* A slightly brighter red on hover */
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(225, 6, 0, 0.3);
+        }
+
+        #home-link:active {
+            transform: translateY(0);
+        }
+
+        /* Optional: styling the arrow specifically */
+        #home-link span {
+            margin-right: 8px;
+            font-size: 1.1rem;
+            line-height: 0;
+        }
+
         @media (max-width: 640px) {
             #board-actions { justify-content: flex-end; }
             #leaderboard-btn { width: auto; }
@@ -75,28 +114,50 @@
 <body>
 
     <div id="top-nav">
-        <a id="home-link" href="index.html">&larr; Back to Paddock (Home)</a>
+        <a id="home-link" href="index.html">
+            <span>&larr;</span> Back to Paddock
+        </a>
+        <a id="home-link" href="leaderboard.html">
+            Leaderboard
+        </a>
     </div>
     <h3 id="race-name">Race: Loading...</h3>
     <h2 id="status">Loading Board...</h2>
-    
+    <div id="stats-dashboard" style="width: 100%; max-width: 500px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px;">
+    <div style="background: #1a1f27; padding: 10px; border-radius: 8px; border-left: 4px solid gold; text-align: center;">
+        <div style="font-size: 0.7rem; color: #b6bdc8; text-transform: uppercase;">Live Total</div>
+        <div id="stat-total-pts" style="font-size: 1.8rem; font-weight: bold; color: gold;">0</div>
+    </div>
+    <div style="background: #1a1f27; padding: 10px; border-radius: 8px; border-left: 4px solid var(--f1-red); text-align: center;">
+        <div style="font-size: 0.7rem; color: #b6bdc8; text-transform: uppercase;">Hits / Bingos</div>
+        <div style="font-size: 1.5rem; font-weight: bold;">
+            <span id="stat-hits" style="color: white;">0</span>
+            <span style="color: #444; margin: 0 5px;">|</span>
+            <span id="stat-bingos" style="color: var(--f1-red);">0</span>
+        </div>
+    </div>
+    <div colspan="2" style="grid-column: span 2; background: rgba(255,255,255,0.05); padding: 8px 15px; border-radius: 6px; font-size: 0.8rem; display: flex; justify-content: space-between;">
+        <span>Squares: <strong id="stat-sq-pts">0</strong> pts</span>
+        <span>Bingo Bonus: <strong id="stat-bonus-pts">0</strong> pts</span>
+    </div>
+</div>
     <div id="board-section">
         <div class="bingo-board" id="board"></div>
         <div id="board-actions">
-            <button id="leaderboard-btn" onclick="openLeaderboardModal()">LEADERBOARD</button>
+            <!--<button id="leaderboard-btn" onclick="openLeaderboardModal()">LEADERBOARD</button>-->
         </div>
     </div>
 
     <div id="setup-controls" style="display:none; margin: 20px; padding: 15px; border: 1px dashed #555; border-radius: 8px; background: rgba(255,255,255,0.05);">
         <p style="margin-top: 0;"><strong>Drafting Mode:</strong> Double-click a cell to swap it.</p>
-        
+
         <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap; justify-content: center;">
             <button onclick="finalizeBoard()" style="background: #28a745; font-size: 1.1rem; padding: 12px 24px;">Lock-in & Register Board</button>
-            
+
             <div style="max-width: 300px; text-align: left; font-size: 0.85rem; color: #bbb; line-height: 1.4;">
-                <span style="color: #ffc107; font-weight: bold;">⚠️ Warning:</span> 
-                Once locked in, you can no longer edit these squares. 
-                Remember the name you've given to refer back to this later. 
+                <span style="color: #ffc107; font-weight: bold;">⚠️ Warning:</span>
+                Once locked in, you can no longer edit these squares.
+                Remember the name you've given to refer back to this later.
                 There is no editing allowed after registering. The host/Race Control will mark off events live and it will be reflected on this card accordingly.
             </div>
         </div>
@@ -145,6 +206,7 @@
                                 <th>Races</th>
                                 <th>Wins</th>
                                 <th>Podiums</th>
+                                <th>Bingos Hit</th>
                                 <th>Total Pts</th>
                             </tr>
                         </thead>
@@ -164,7 +226,10 @@
                                 <th>Pos</th>
                                 <th>Driver</th>
                                 <th>Events Hit</th>
-                                <th>Score</th>
+                                <th>Bingos Hit</th>
+                                <th>Squares</th>
+                                <th>Bonus</th>
+                                <th>Total</th>
                             </tr>
                         </thead>
                         <tbody id="leaderboard-race-body"></tbody>
@@ -177,7 +242,7 @@
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
         const resolveCalendarRace = F1Calendar2026.resolveRace;
-   
+
         const rarityColors = {
             1: "#ffffff", // Common
             2: "#3c7a3e", // Uncommon
@@ -188,7 +253,7 @@
 
         let liveEvents = new Set();
         let myBoardData = {
-            id: localStorage.getItem('f1_bingo_id'), 
+            id: localStorage.getItem('f1_bingo_id'),
             playerName: '',
             layout: [],
             marks: []
@@ -241,13 +306,13 @@
             // 2. Get initial "Happened" state
             const { data: live } = await db.from('live_race_state').select('event_text').eq('is_happened', true);
             live?.forEach(l => liveEvents.add(l.event_text));
-            
+
             setupListener();
 
             if (myBoardData.id && myBoardData.id !== "null") {
                 loadExistingBoard();
             } else {
-                showSetupScreen(); 
+                showSetupScreen();
             }
         }
 
@@ -274,7 +339,7 @@
             // Fetch pool (ensure 'points' is lowercase to match your DB)
             const { data: pool } = await db.from('f1_events_pool').select('Event, points');
             if (!pool) { alert("Error connecting to Race Control."); return; }
-            
+
             fullEventPool = pool;
 
             // Shuffle and pick 24
@@ -282,7 +347,7 @@
 
             // Convert objects to just the Event strings FIRST
             let layoutStrings = shuffled.map(x => x.Event);
-            
+
             // NOW insert the Free Space string at index 12 (the dead center)
             layoutStrings.splice(12, 0, "FREE SPACE");
 
@@ -297,62 +362,78 @@
         function renderBoard() {
             const boardEl = document.getElementById('board');
             boardEl.innerHTML = "";
-            let currentScore = 0;
-            
+
+            // 1. Initialize counters
+            let squarePoints = 0;
+            let hitsCount = 0;
+            let bingoCount = 0;
+            let bonusPoints = 0;
+
             myBoardData.layout.forEach((text, index) => {
                 const cell = document.createElement('div');
                 cell.className = "cell";
-                
-                // Find the event in our pool to get its points
+
                 const eventData = fullEventPool.find(e => e.Event === text);
-                const pts = eventData ? (eventData.points || 1) : 0; // 0 for Free Space
+                const pts = eventData ? (eventData.points || 1) : 0;
                 const color = rarityColors[pts] || "#ffffff";
 
                 if (text === "FREE SPACE") {
                     cell.classList.add('free-space');
                 } else {
-                    // Apply the rarity color to the text
                     cell.style.color = color;
-                    // Add a very subtle glow if it's a high-value square
                     if (pts >= 4) cell.style.textShadow = `0 0 5px ${color}66`;
                 }
 
+                // Logic for "Hit" squares
                 if (liveEvents.has(text)) {
                     cell.classList.add('live-happened');
-                    cell.style.color = color; // Contrast for the gold background
-                    currentScore += pts;
-                }
-                else {
-                    // RESET the color to rarity color if it's not live
+                    cell.style.color = color;
+                    squarePoints += pts; // Add base square value
+                    hitsCount++;        // Increment hit counter
+                } else {
                     cell.classList.remove('live-happened');
                     cell.style.color = (text === "FREE SPACE") ? "white" : color;
                 }
-                
+
                 if (myBoardData.marks.includes(index)) cell.classList.add('marked');
-                
+
                 cell.innerText = text;
-                // cell.onclick = () => isEditing ? openSwapModal(index) : toggleMark(index);
                 cell.onclick = () => {
-                    if (text === "FREE SPACE") return; // Absolute block
+                    if (text === "FREE SPACE") return;
                     isEditing ? openSwapModal(index) : toggleMark(index);
                 };
                 boardEl.appendChild(cell);
             });
 
-            // Update Score Display
-            const statusEl = document.getElementById('status');
-            if (!isEditing) {
-                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
-            }
+            // 2. Calculate Bingo Bonuses (+5 per line)
+            const completedLines = WINNING_LINES.filter(line => {
+                return line.every(index => {
+                    const cellText = myBoardData.layout[index];
+                    return cellText === "FREE SPACE" || liveEvents.has(cellText);
+                });
+            });
 
+            bingoCount = completedLines.length;
+            bonusPoints = bingoCount * 5;
+            const liveTotal = squarePoints + bonusPoints;
+
+            // 3. Update the UI Elements
+            document.getElementById('stat-total-pts').innerText = liveTotal;
+            document.getElementById('stat-hits').innerText = hitsCount;
+            document.getElementById('stat-bingos').innerText = bingoCount;
+            document.getElementById('stat-sq-pts').innerText = squarePoints;
+            document.getElementById('stat-bonus-pts').innerText = bonusPoints;
+
+            // Update Status Bar
+            const statusEl = document.getElementById('status');
             if (isEditing) {
-                statusEl.innerText = "Drafting Your Board... Current Potential: " + 
-                myBoardData.layout.reduce((acc, txt) => {
+                const potential = myBoardData.layout.reduce((acc, txt) => {
                     const d = fullEventPool.find(e => e.Event === txt);
                     return acc + (d ? (d.points || 1) : 0);
-                }, 0) + " pts";
+                }, 0);
+                statusEl.innerText = `Drafting Board... (Potential: ${potential} pts)`;
             } else {
-                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span> | Score: <span style="font-size: 1.5rem; color: #ffc107;">${currentScore}</span>`;
+                statusEl.innerHTML = `Driver: <span style="color:gold;">${myBoardData.playerName}</span>`;
             }
 
             checkWinCondition();
@@ -396,7 +477,7 @@
             selectedCellIndex = index;
             const picker = document.getElementById('event-picker');
             picker.innerHTML = "";
-            
+
             fullEventPool.forEach(ev => {
                 if (!myBoardData.layout.includes(ev.Event)) {
                     let opt = document.createElement('option');
@@ -505,6 +586,7 @@
                         player_id: row.player_id,
                         player_name: row.player_name,
                         total_points: 0,
+                        total_bingos: 0,
                         races: 0,
                         wins: 0,
                         podiums: 0
@@ -513,6 +595,7 @@
 
                 const entry = totals.get(key);
                 entry.total_points += row.score;
+                entry.total_bingos += (row.bingo_count || 0);
                 entry.races += 1;
                 if (row.position === 1) entry.wins += 1;
                 if (row.position && row.position <= 3) entry.podiums += 1;
@@ -534,6 +617,7 @@
                     <td>${row.races}</td>
                     <td>${row.wins}</td>
                     <td>${row.podiums}</td>
+                    <td>${row.total_bingos}</td>
                     <td>${row.total_points}</td>
                 `;
                 tbody.appendChild(tr);
@@ -588,9 +672,12 @@
 
                 tr.innerHTML = `
                     <td>${row.position || (index + 1)}</td>
-                    <td>${row.player_name}</td>
+                    <td style="font-weight:bold;">${row.player_name}</td>
                     <td>${row.events_hit}</td>
-                    <td>${row.score}</td>
+                    <td style="color:#00d2ff;">${row.bingo_count || 0}</td>
+                    <td>${row.square_pts || 0}</td>
+                    <td style="color:#ffc107;">+${row.bingo_bonus || 0}</td>
+                    <td style="font-weight:bold; color:var(--f1-red);">${row.score}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -618,7 +705,7 @@
 
             const { data, error } = await db
                 .from('leaderboard')
-                .select('race_name, race_round, player_id, player_name, score, events_hit, position, recorded_at');
+                .select('race_name, race_round, player_id, player_name, score, events_hit, bingo_count, square_pts, bingo_bonus, position, recorded_at');
 
             setLeaderboardLoading(false);
 
@@ -641,6 +728,9 @@
                 player_name: row.player_name || 'Unknown Driver',
                 score: numericOrNull(row.score) ?? 0,
                 events_hit: numericOrNull(row.events_hit) ?? 0,
+                bingo_count: numericOrNull(row.bingo_count) ?? 0,
+                square_pts: numericOrNull(row.square_pts) ?? 0,
+                bingo_bonus: numericOrNull(row.bingo_bonus) ?? 0,
                 position: numericOrNull(row.position),
                 recorded_at: row.recorded_at || ''
             }));

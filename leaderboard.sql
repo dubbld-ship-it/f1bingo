@@ -52,3 +52,9 @@ create policy leaderboard_delete_all
     for delete
     to anon, authenticated
     using (true);
+
+-- leaderboard table update to include pts breakdown
+ALTER TABLE leaderboard
+ADD COLUMN square_pts INT DEFAULT 0,
+ADD COLUMN bingo_bonus INT DEFAULT 0,
+ADD COLUMN bingo_count INT DEFAULT 0;
