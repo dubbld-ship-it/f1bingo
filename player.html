@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Player - F1 Bingo</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="calendar-2026.js"></script>
     <style>
         :root { --f1-red: #E10600; --f1-dark: #15151E; --f1-grey: #333; }
         body { font-family: Arial, sans-serif; background: var(--f1-dark); color: white; padding: 20px; display: flex; flex-direction: column; align-items: center; }
@@ -175,6 +176,7 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
+        const resolveCalendarRace = F1Calendar2026.resolveRace;
    
         const rarityColors = {
             1: "#ffffff", // Common
@@ -214,9 +216,8 @@
         async function loadSelectedRaceName() {
             const { data, error } = await db
                 .from('app_config')
-                .select('value')
-                .eq('key', 'selected_race_name')
-                .maybeSingle();
+                .select('key, value')
+                .in('key', ['selected_race_id', 'selected_race_name']);
 
             if (error) {
                 console.error('Could not load selected race name:', error);
@@ -224,7 +225,10 @@
                 return;
             }
 
-            updateRaceNameDisplay(data?.value || '');
+            const config = new Map((data || []).map(row => [row.key, row.value]));
+            const selectedRace = resolveCalendarRace(config.get('selected_race_id'))
+                || resolveCalendarRace(config.get('selected_race_name'));
+            updateRaceNameDisplay(selectedRace?.name || config.get('selected_race_name') || '');
         }
 
         async function init() {
@@ -712,8 +716,15 @@
                 })
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, (payload) => {
                     const key = payload?.new?.key || payload?.old?.key;
-                    if (key !== 'selected_race_name') return;
-                    updateRaceNameDisplay(payload?.new?.value || '');
+                    if (key !== 'selected_race_id' && key !== 'selected_race_name') return;
+
+                    const value = payload?.new?.value || '';
+                    const selectedRace = resolveCalendarRace(value);
+                    if (selectedRace) {
+                        updateRaceNameDisplay(selectedRace.name);
+                    } else if (key === 'selected_race_name') {
+                        updateRaceNameDisplay(value);
+                    }
                 }).subscribe();
         }
 

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Host - F1 Race Control</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="calendar-2026.js"></script>
     <style>
         :root { --f1-red: #e10600; --f1-dark: #1f1f27; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #111; color: white; padding: 20px; }
@@ -167,33 +168,7 @@
 
     <script>
         const db = supabase.createClient('https://aqsaztcdkcbnhstjseam.supabase.co', 'sb_publishable_Q7mqIq2YrT3vscykJmLvOA_AliGTKCe');
-        const CHAMPIONSHIP_YEAR = 2026;
-        const FALLBACK_RACES_2026 = [
-            'Australian Grand Prix',
-            'Chinese Grand Prix',
-            'Japanese Grand Prix',
-            'Bahrain Grand Prix',
-            'Saudi Arabian Grand Prix',
-            'Miami Grand Prix',
-            'Canadian Grand Prix',
-            'Monaco Grand Prix',
-            'Barcelona-Catalunya Grand Prix',
-            'Austrian Grand Prix',
-            'British Grand Prix',
-            'Belgian Grand Prix',
-            'Hungarian Grand Prix',
-            'Dutch Grand Prix',
-            'Italian Grand Prix',
-            'Spanish Grand Prix',
-            'Azerbaijan Grand Prix',
-            'Singapore Grand Prix',
-            'United States Grand Prix',
-            'Mexico City Grand Prix',
-            'Sao Paulo Grand Prix',
-            'Las Vegas Grand Prix',
-            'Qatar Grand Prix',
-            'Abu Dhabi Grand Prix'
-        ];
+        const { CHAMPIONSHIP_YEAR, races: RACES_2026, resolveRace } = F1Calendar2026;
 
         const rarityColors = {
             1: "#ffffff", // Common (White)
@@ -225,125 +200,101 @@
             title.innerText = `${raceName} - Race Control`;
         }
 
-        function extractRaceNamesFromCalendar(calendarText, year) {
-            const raceNames = [];
-            const seen = new Set();
-            const linePattern = new RegExp(`FORMULA 1\\s+(.+?)\\s+${year}`, 'i');
-
-            calendarText.split('\n').forEach(line => {
-                if (!line.includes('FORMULA 1') || !line.includes(String(year))) return;
-                const match = line.match(linePattern);
-                if (!match) return;
-
-                const candidate = match[1].replace(/\s+/g, ' ').trim();
-                const isRaceName = /(GRAND PRIX|GRAN PREMIO|GRANDE PR)/i.test(candidate);
-                const isTesting = /TESTING/i.test(candidate);
-                if (!isRaceName || isTesting) return;
-                if (seen.has(candidate)) return;
-
-                seen.add(candidate);
-                raceNames.push(candidate);
-            });
-
-            return raceNames;
-        }
-
-        async function fetchRaceNamesFromF1(year) {
-            const sources = [
-                `https://r.jina.ai/http://www.formula1.com/en/racing/${year}`,
-                `https://r.jina.ai/http://www.formula1.com/en/racing/${year}.html`
-            ];
-
-            for (const source of sources) {
-                try {
-                    const res = await fetch(source, { cache: 'no-store' });
-                    if (!res.ok) continue;
-                    const text = await res.text();
-                    const races = extractRaceNamesFromCalendar(text, year);
-                    if (races.length >= 20) return races;
-                } catch (err) {
-                    console.warn(`Could not fetch race list from ${source}`, err);
-                }
-            }
-
-            return FALLBACK_RACES_2026;
-        }
-
         async function initRaceSelector() {
             const select = document.getElementById('race-select');
-            const races = await fetchRaceNamesFromF1(CHAMPIONSHIP_YEAR);
 
             select.innerHTML = '<option value="">Select race</option>';
-            races.forEach(race => {
+            RACES_2026.forEach(race => {
                 const option = document.createElement('option');
-                option.value = race;
-                option.textContent = race;
+                option.value = race.id;
+                option.dataset.round = String(race.round);
+                option.dataset.raceName = race.name;
+                option.textContent = `Round ${race.round}: ${race.name}`;
                 select.appendChild(option);
             });
             select.disabled = false;
 
-            const { data: selectedRaceRow } = await db
+            const { data: selectedRaceRows, error } = await db
                 .from('app_config')
-                .select('value')
-                .eq('key', 'selected_race_name')
-                .maybeSingle();
+                .select('key, value')
+                .in('key', ['selected_race_id', 'selected_race_name']);
 
-            const selectedRace = selectedRaceRow?.value || '';
-            if (selectedRace && !races.includes(selectedRace)) {
-                const customOption = document.createElement('option');
-                customOption.value = selectedRace;
-                customOption.textContent = selectedRace;
-                select.appendChild(customOption);
+            if (error) {
+                console.error('Could not load selected race.', error);
             }
 
-            select.value = selectedRace;
-            updateHostTitle(selectedRace);
+            const config = new Map((selectedRaceRows || []).map(row => [row.key, row.value]));
+            const selectedRace = resolveRace(config.get('selected_race_id'))
+                || resolveRace(config.get('selected_race_name'));
+
+            select.value = selectedRace?.id || '';
+            updateHostTitle(selectedRace?.name || '');
+
+            const needsMigration = selectedRace && (
+                config.get('selected_race_id') !== selectedRace.id
+                || config.get('selected_race_name') !== selectedRace.name
+            );
+            if (needsMigration) {
+                await persistSelectedRace(selectedRace, true);
+            }
         }
 
         async function saveSelectedRace() {
-            const raceName = getSelectedRaceName();
-            updateHostTitle(raceName);
-            await loadLeaderboard();
-            if (!raceName) return;
+            const race = getSelectedRace();
+            updateHostTitle(race?.name || '');
+            if (!race) return;
 
+            const error = await persistSelectedRace(race, false);
+            if (!error) await loadLeaderboard();
+        }
+
+        async function saveConfigValue(key, value) {
             const { data: updatedRows, error: updateErr } = await db
                 .from('app_config')
-                .update({ value: raceName })
-                .eq('key', 'selected_race_name')
+                .update({ value })
+                .eq('key', key)
                 .select('key');
 
             if (updateErr) {
-                console.error('Failed to save race selection.', updateErr);
-                alert('Could not save selected race.');
-                return;
+                return updateErr;
             }
 
             if (!updatedRows || updatedRows.length === 0) {
                 const { error: insertErr } = await db
                     .from('app_config')
-                    .insert([{ key: 'selected_race_name', value: raceName }]);
-                if (insertErr) {
-                    console.error('Failed to insert race selection.', insertErr);
-                    alert('Could not save selected race.');
-                }
+                    .insert([{ key, value }]);
+                if (insertErr) return insertErr;
             }
 
-            await loadLeaderboard();
+            return null;
+        }
+
+        async function persistSelectedRace(race, silent) {
+            const errors = (await Promise.all([
+                saveConfigValue('selected_race_id', race.id),
+                saveConfigValue('selected_race_name', race.name)
+            ])).filter(Boolean);
+
+            if (errors.length) {
+                console.error('Failed to save race selection.', errors);
+                if (!silent) alert('Could not save selected race.');
+                return errors[0];
+            }
+
+            return null;
+        }
+
+        function getSelectedRace() {
+            const select = document.getElementById('race-select');
+            return resolveRace(select?.value);
         }
 
         function getSelectedRaceName() {
-            const select = document.getElementById('race-select');
-            return (select?.value || '').trim();
+            return getSelectedRace()?.name || '';
         }
 
         function getSelectedRaceRound() {
-            const select = document.getElementById('race-select');
-            const raceName = getSelectedRaceName();
-            if (!select || !raceName) return null;
-
-            const options = Array.from(select.options).filter(opt => !!opt.value);
-            const idx = options.findIndex(opt => opt.value === raceName);
-            return idx >= 0 ? idx + 1 : null;
+            return getSelectedRace()?.round || null;
         }
 
         async function load() {
